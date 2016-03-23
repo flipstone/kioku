@@ -25,8 +25,14 @@ library
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.8 && <4.9
+                     , base16-bytestring
                      , bytestring
+                     , containers
+                     , cryptohash
+                     , directory
+                     , filepath
                      , mmap
+                     , temporary
                      , vector
                      , vector-algorithms
   hs-source-dirs:      src

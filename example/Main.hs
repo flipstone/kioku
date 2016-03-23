@@ -14,26 +14,24 @@ main :: IO ()
 main = do
   args <- getArgs
 
-  case args of
-    ("cities":"load":_) -> do
-      putStrLn $ "Loading city data."
+  withKiokuDB defaultKiokuPath $ \db -> do
+    case args of
+      ("cities":"load":_) -> do
+        putStrLn $ "Loading city data."
 
-      count <- do cities <- loadCities "example/data/cities.txt.gz"
-                  memorizeRows cities "cities.data"
+        count <- do cities <- loadCities "example/data/cities.txt.gz"
+                    createDataSet "cities" cities db
 
-      putStrLn $ "Done... loaded " ++ show count ++ " cities"
+        putStrLn $ "Done... loaded " ++ show count ++ " cities"
 
-    ("cities":"index":_) -> do
-      putStrLn $ "Indexing cities by name."
+      ("cities":"index":_) -> do
+        putStrLn $ "Indexing cities by name."
+        createIndex "cities" "cities.name" cityName db
+        putStrLn $ "Done... "
 
-      indexRows "name" cityName "cities.data"
-
-      putStrLn $ "Done... "
-
-    ("cities":"query":name:_) -> do
-      withKiokuData "cities.data" "name" $ \dat -> do
-        let results = kiokuMatch (CBS.pack name) dat
-        for_ results $ \city -> do
+      ("cities":"query":name:_) -> do
+        cities <- query "cities.name" (keyPrefix $ CBS.pack name) db
+        for_ cities $ \city -> do
           CBS.putStr   $ cityName city
           CBS.putStr   $ " - ("
           CBS.putStr   $ cityLat city
