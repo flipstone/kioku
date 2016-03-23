@@ -1,0 +1,6 @@
+dev:
+  image: haskell:7.10.3
+  volumes:
+    - .:/kioku
+  working_dir: /kioku
+
