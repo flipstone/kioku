@@ -31,3 +31,16 @@ library
                      , vector-algorithms
   hs-source-dirs:      src
   default-language:    Haskell2010
+
+executable kioku-example
+  ghc-options:         -O3 -Wall
+  default-extensions:  OverloadedStrings
+  build-depends:       base >=4.8 && <4.9
+                     , bytestring
+                     , random
+                     , zlib
+
+                     , kioku
+
+  main-is:             example/Main.hs
+

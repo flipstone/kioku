@@ -6,6 +6,11 @@ module Database.Kioku
   , indexRows
 
   -- Usage
+  , KiokuData
+  , withKiokuData
+  , kiokuLookup
+  , kiokuMatch
+
   , TrieIndex
   , withTrieIndex
   , trieLookup
@@ -78,8 +83,16 @@ withBuffer path action = do
 
 readBufAt :: Memorizable a => Buffer -> Int -> a
 readBufAt (Buffer bytes) off =
-  let readBytes =  {-# SCC readBufAt_drop #-} BS.drop off bytes
-  in {-# SCC readBufAt_recall #-} recall readBytes
+  let readBytes = BS.drop off bytes
+  in recall readBytes
+
+readRowAt :: Memorizable a => Buffer -> Int -> a
+readRowAt (Buffer bytes) off =
+  let rowHeader = BS.drop off bytes
+      rowLength = recall rowHeader
+      rowBytes = BS.take rowLength $ BS.drop 8 rowHeader
+
+  in recall rowBytes
 
 extractBufRange :: Buffer -> Int -> Int -> BS.ByteString
 extractBufRange (Buffer bytes) offset len = BS.take len $ BS.drop offset bytes
@@ -95,7 +108,7 @@ loadAllRows file action = do
 
     rows <- for [0..rowCount-1] $ \n -> do
       offset <- V.read vec n
-      pure $ (offset, readBufAt buf offset)
+      pure $ (offset, readRowAt buf offset)
 
     action rows
 
@@ -118,7 +131,7 @@ buildSortedOffsetArray keyFunc buf rowCount = do
   vec <- V.new rowCount
   collectRowPointers rowCount 0 0 vec buf
 
-  let keyAt = keyFunc . readBufAt buf
+  let keyAt = keyFunc . readRowAt buf
 
   S.sortBy (compare `on` keyAt)
            (S.terminate . keyAt)
@@ -131,12 +144,31 @@ buildSortedOffsetArray keyFunc buf rowCount = do
 collectRowPointers :: Int -> Int -> Int -> V.IOVector Int -> Buffer -> IO ()
 collectRowPointers total ndx offset vec buf
     | ndx < total = {-# SCC collectRowPointers #-} do
-      let rowOff = offset + 8
-      V.write vec ndx rowOff
+      V.write vec ndx offset
       let rowSize = readBufAt buf offset :: Int
-      collectRowPointers total (ndx + 1) (rowOff + rowSize) vec buf
+      collectRowPointers total (ndx + 1) (offset + rowSize + 8) vec buf
 
     | otherwise = pure ()
+
+data KiokuData a = KD {
+    kdBuf :: Buffer
+  , kdIndex :: TrieIndex
+  }
+
+withKiokuData :: FilePath -> String -> (KiokuData a -> IO b) -> IO b
+withKiokuData path indexName action =
+  withBuffer path $ \dataBuf ->
+    withTrieIndex (path ++ "." ++ indexName) $ \idx ->
+      action (KD dataBuf idx)
+
+readDataEntries :: Memorizable a => Buffer -> [Int] -> [a]
+readDataEntries buf = map (readRowAt buf)
+
+kiokuLookup :: Memorizable a => BS.ByteString -> KiokuData a -> [a]
+kiokuLookup key (KD buf idx) = readDataEntries buf $ trieLookup key idx
+
+kiokuMatch :: Memorizable a => BS.ByteString -> KiokuData a -> [a]
+kiokuMatch key (KD buf idx) = readDataEntries buf $ trieMatch key idx
 
 data TrieIndex = TI {
     tiBuf :: Buffer
@@ -298,9 +330,6 @@ writeTrieIndex :: Memorizable a
                -> Handle
                -> IO ()
 writeTrieIndex keyFunc vec buf h = do
-    -- need to handle empty case
-    --offset <- vec `V.unsafeRead` 0
-    --startNew offset (keyFunc $ readBufAt buf offset) 1
     (rootOffset, totalBytes, _) <- writeTrie "" "" [] [] 0 0
     BS.hPutStr h $ memorize (totalBytes - rootOffset)
   where
@@ -317,7 +346,7 @@ writeTrieIndex keyFunc vec buf h = do
       | ndx < len = do
         datOffset <- V.read vec ndx
 
-        let key = keyFunc $ readBufAt buf datOffset
+        let key = keyFunc $ readRowAt buf datOffset
             (ctxShared, ctxLeft, ctxRight) = breakCommonPrefix ctx key
             (arcShared, arcLeft, arcRight) = breakCommonPrefix arc ctxRight
             z  = BS.null

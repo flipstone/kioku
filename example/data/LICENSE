@@ -1,0 +1,11 @@
+cities.txt.gz
+=============
+
+This data is being redistributed from geonames.org under a Creative Commons
+Attribution 3.0 License, see http://creativecommons.org/licenses/by/3.0/.
+
+It has been repackaged as .gz file, but otherwise underchanged from the original.
+The original download was obtained from:
+
+  http://download.geonames.org/export/dump/allCountries.zip
+
