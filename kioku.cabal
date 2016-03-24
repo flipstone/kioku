@@ -19,10 +19,14 @@ cabal-version:       >=1.10
 library
   ghc-options:         -Wall -fprof-auto
   exposed-modules:     Database.Kioku
-                     , Database.Kioku.Example
+                     , Database.Kioku.Core
+                     , Database.Kioku.Memorizable
+
+  other-modules:       Database.Kioku.Internal.Buffer
+                     , Database.Kioku.Internal.TrieIndex
+
   default-extensions:  OverloadedStrings
 
-  -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.8 && <4.9
                      , base16-bytestring
@@ -32,7 +36,6 @@ library
                      , directory
                      , filepath
                      , mmap
-                     , temporary
                      , vector
                      , vector-algorithms
   hs-source-dirs:      src
