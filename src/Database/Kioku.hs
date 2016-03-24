@@ -5,6 +5,9 @@ module Database.Kioku
   , memorizeRows
   , indexRows
 
+  , delimit, undelimit
+  , nullDelimit, unNullDelimit
+
   -- Usage
   , KiokuDB
   , DataSetName, IndexName
@@ -50,6 +53,7 @@ import            Data.Function
 import            Data.Traversable
 import qualified  Data.Vector.Unboxed.Mutable as V
 import qualified  Data.Vector.Algorithms.AmericanFlag as S
+import            Data.Word
 import            Foreign.Ptr
 import            System.Directory
 import            System.FilePath
@@ -60,6 +64,18 @@ import            System.IO.Temp
 class Memorizable a where
   memorize :: a -> BS.ByteString
   recall :: BS.ByteString -> a
+
+delimit :: Word8 -> [BS.ByteString] -> BS.ByteString
+delimit delim = BS.intercalate (BS.singleton delim)
+
+undelimit :: Word8 -> BS.ByteString -> [BS.ByteString]
+undelimit delim = BS.split delim
+
+nullDelimit :: [BS.ByteString] -> BS.ByteString
+nullDelimit = delimit 0
+
+unNullDelimit :: BS.ByteString -> [BS.ByteString]
+unNullDelimit = undelimit 0
 
 data KiokuDB = KiokuDB {
     dataDir  :: FilePath
