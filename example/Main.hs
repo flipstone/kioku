@@ -1,14 +1,13 @@
 module Main where
 
 import qualified  Codec.Compression.GZip as GZ
-import            Data.Bits
 import qualified  Data.ByteString as BS
 import qualified  Data.ByteString.Char8 as CBS
 import qualified  Data.ByteString.Lazy.Char8 as LBS
 import            Data.Foldable
 import            Database.Kioku
 import            System.Environment
-import            System.Random
+import            System.Exit
 
 main :: IO ()
 main = do
@@ -38,6 +37,10 @@ main = do
           CBS.putStr   $ ","
           CBS.putStr   $ cityLng city
           CBS.putStrLn $ ")"
+
+      _ -> do
+        putStrLn $ "Unknown command: " ++ unwords args
+        exitWith (ExitFailure 1)
 
 data City = City {
     cityName :: BS.ByteString

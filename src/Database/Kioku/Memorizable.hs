@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Database.Kioku.Memorizable
   ( Memorizable(..)
 
@@ -20,6 +21,13 @@ module Database.Kioku.Memorizable
 
   , delimit, undelimit
   , nullDelimit, unNullDelimit
+
+  , lengthPrefix, unLengthPrefix
+  , lengthPrefix255, unLengthPrefix255
+  , lengthPrefix65535, unLengthPrefix65535
+
+  , field, (&.), PrefixedFieldDecoder
+  , MemorizeLength, RecallLength, LengthSize
   ) where
 
 import qualified  Data.ByteString as BS
@@ -93,8 +101,8 @@ memorizeWord16 n = {-# SCC memorizeWord16 #-}
 
 recallWord16 :: BS.ByteString -> Word16
 recallWord16 bs = {-# SCC recallWord16 #-}
-  (     fromIntegral (bs `UBS.unsafeIndex` 6) `unsafeShiftL` 8
-    .|. fromIntegral (bs `UBS.unsafeIndex` 7)
+  (     fromIntegral (bs `UBS.unsafeIndex` 0) `unsafeShiftL` 8
+    .|. fromIntegral (bs `UBS.unsafeIndex` 1)
   )
 
 memorizeWord32 :: Word32 -> BS.ByteString
@@ -108,10 +116,10 @@ memorizeWord32 n = {-# SCC memorizeWord32 #-}
 
 recallWord32 :: BS.ByteString -> Word32
 recallWord32 bs = {-# SCC recallWord32 #-}
-  (     fromIntegral (bs `UBS.unsafeIndex` 4) `unsafeShiftL` 24
-    .|. fromIntegral (bs `UBS.unsafeIndex` 5) `unsafeShiftL` 16
-    .|. fromIntegral (bs `UBS.unsafeIndex` 6) `unsafeShiftL` 8
-    .|. fromIntegral (bs `UBS.unsafeIndex` 7)
+  (     fromIntegral (bs `UBS.unsafeIndex` 0) `unsafeShiftL` 24
+    .|. fromIntegral (bs `UBS.unsafeIndex` 1) `unsafeShiftL` 16
+    .|. fromIntegral (bs `UBS.unsafeIndex` 2) `unsafeShiftL` 8
+    .|. fromIntegral (bs `UBS.unsafeIndex` 3)
   )
 
 memorizeWord64 :: Word64 -> BS.ByteString
@@ -234,15 +242,88 @@ roll =
   where
     shiftUp w r = (r `unsafeShiftL` 8) .|. fromIntegral w
 
+{-# INLINE delimit #-}
 delimit :: Word8 -> [BS.ByteString] -> BS.ByteString
 delimit delim = BS.intercalate (BS.singleton delim)
 
+{-# INLINE undelimit #-}
 undelimit :: Word8 -> BS.ByteString -> [BS.ByteString]
 undelimit delim = BS.split delim
 
+{-# INLINE nullDelimit #-}
 nullDelimit :: [BS.ByteString] -> BS.ByteString
 nullDelimit = delimit 0
 
+{-# INLINE unNullDelimit #-}
 unNullDelimit :: BS.ByteString -> [BS.ByteString]
 unNullDelimit = undelimit 0
+
+type MemorizeLength = Int -> BS.ByteString
+type RecallLength = BS.ByteString -> Int
+type LengthSize = Int
+type PrefixedFieldDecoder a t b r =
+     RecallLength
+  -> LengthSize
+  -> (a -> BS.ByteString -> b)
+  -> (BS.ByteString -> t)
+  -> BS.ByteString
+  -> r
+
+lengthPrefix :: MemorizeLength
+             -> [BS.ByteString]
+             -> BS.ByteString
+lengthPrefix memorizeLength =
+    BS.concat . addPrefixes
+  where
+    addPrefixes [] = []
+    addPrefixes (f:rest) = memorizeLength (BS.length f)
+                         : f
+                         : addPrefixes rest
+
+{-# INLINE field #-}
+field :: PrefixedFieldDecoder a a b b
+field recallLength lengthWidth cont f bs =
+  let !len = recallLength bs
+      !start = BS.drop lengthWidth bs
+      !value = BS.take len start
+      !rest = BS.drop len start
+
+  in cont (f value) rest
+
+{-# INLINE (&.) #-}
+(&.) :: PrefixedFieldDecoder (BS.ByteString -> b) t c r
+     -> PrefixedFieldDecoder a b c c
+     -> PrefixedFieldDecoder a t c r
+bc &. ab = \recallL size -> bc recallL size . ab recallL size
+
+{-# INLINE unLengthPrefix #-}
+unLengthPrefix :: RecallLength
+               -> LengthSize
+               -> (BS.ByteString -> t)
+               -> PrefixedFieldDecoder a t a r
+               -> BS.ByteString
+               -> r
+unLengthPrefix recallLength lengthWidth f decoder
+  = decoder recallLength lengthWidth const f
+
+lengthPrefix255 :: [BS.ByteString] -> BS.ByteString
+lengthPrefix255 = lengthPrefix (memorizeWord8 . fromIntegral)
+
+unLengthPrefix255 :: (BS.ByteString -> t)
+                  -> PrefixedFieldDecoder a t a r
+                  -> BS.ByteString
+                  -> r
+unLengthPrefix255 = unLengthPrefix (fromIntegral . recallWord8)
+                                   1
+
+lengthPrefix65535 :: [BS.ByteString] -> BS.ByteString
+lengthPrefix65535 = lengthPrefix (memorizeWord16 . fromIntegral)
+
+
+unLengthPrefix65535 :: (BS.ByteString -> t)
+                    -> PrefixedFieldDecoder a t a r
+                    -> BS.ByteString
+                    -> r
+unLengthPrefix65535 = unLengthPrefix (fromIntegral . recallWord16)
+                                     2
 
