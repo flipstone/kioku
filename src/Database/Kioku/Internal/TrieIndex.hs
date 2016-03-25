@@ -25,9 +25,9 @@ bufferTrieIndex buf =
   in TI buf 0 rootOffset
 
 data TrieIndex = TI {
-    tiBuf :: Buffer
-  , tiArcDrop :: Int
-  , tiRoot :: Int
+    _tiBuf :: Buffer
+  , _tiArcDrop :: Int
+  , _tiRoot :: Int
   }
 
 lookupSubtrie :: BS.ByteString -> TrieIndex -> Maybe TrieIndex
@@ -208,14 +208,14 @@ writeTrieIndex keyFunc vec buf h = do
           -- new item is a subtrie of the current arc
           _ | sameCtx, z arcLeft -> do
             let subctx = ctx `BS.append` arc
-            (sub, offset, ndx) <- writeTrie subctx
-                                            arcRight
-                                            []
-                                            [datOffset]
-                                            (ndx + 1)
-                                            offset
+            (sub, newOffset, newNdx) <- writeTrie subctx
+                                                  arcRight
+                                                  []
+                                                  [datOffset]
+                                                  (ndx + 1)
+                                                  offset
 
-            writeTrie ctx arc (sub:subtries) values ndx offset
+            writeTrie ctx arc (sub:subtries) values newNdx newOffset
 
           -- new item is a separate (non-zero) arc in the same context
           _ | sameCtx, nz arcShared, nz arcLeft, nz arcRight -> do
@@ -224,14 +224,14 @@ writeTrieIndex keyFunc vec buf h = do
             let subL = offset
                 subctx = ctxShared `BS.append` arcShared
 
-            (subR, offset, ndx) <- writeTrie subctx
-                                             arcRight
-                                             []
-                                             [datOffset]
-                                             (ndx + 1)
-                                             (offset + written)
+            (subR, newOffset, newNdx) <- writeTrie subctx
+                                                   arcRight
+                                                   []
+                                                   [datOffset]
+                                                   (ndx + 1)
+                                                   (offset + written)
 
-            writeTrie ctx arcShared [subR,subL] [] ndx offset
+            writeTrie ctx arcShared [subR,subL] [] newNdx newOffset
 
           _ -> do
             bytesWritten <- flushTrie arc subtries values

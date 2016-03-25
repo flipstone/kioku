@@ -9,7 +9,6 @@ module Database.Kioku.Core
   , query, keyExact, keyPrefix
   ) where
 
-import            Control.Applicative
 import            Control.Concurrent.MVar
 import            Control.Exception
 import            Crypto.Hash.SHA256
@@ -81,7 +80,7 @@ indexObjFile :: KiokuDB -> IndexName -> FilePath
 indexObjFile db name = objDir db </> "index" </> name
 
 dataFilePath :: KiokuDB -> BS.ByteString -> FilePath
-dataFilePath db hash = dataDir db </> BS.unpack hash
+dataFilePath db sha = dataDir db </> BS.unpack sha
 
 hashFile :: FilePath -> IO BS.ByteString
 hashFile = fmap (Base16.encode . hashlazy) . LBS.readFile

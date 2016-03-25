@@ -17,6 +17,9 @@ module Database.Kioku.Memorizable
 
   , roll
   , unroll
+
+  , delimit, undelimit
+  , nullDelimit, unNullDelimit
   ) where
 
 import qualified  Data.ByteString as BS
