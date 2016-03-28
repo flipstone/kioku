@@ -16,6 +16,9 @@ module Database.Kioku.Memorizable
 
   , memorizeInteger, recallInteger
 
+  , memorizeDouble, recallDouble
+  , memorizeFloat, recallFloat
+
   , roll
   , unroll
 
@@ -34,55 +37,12 @@ import qualified  Data.ByteString as BS
 import qualified  Data.ByteString.Unsafe as UBS
 import            Data.Bits
 import            Data.Int
+import            Data.ReinterpretCast
 import            Data.Word
 
 class Memorizable a where
   memorize :: a -> BS.ByteString
   recall :: BS.ByteString -> a
-
-instance Memorizable BS.ByteString where
-  memorize = id
-  recall = id
-
-instance Memorizable Word8 where
-  memorize = memorizeWord8
-  recall = recallWord8
-
-instance Memorizable Word16 where
-  memorize = memorizeWord16
-  recall = recallWord16
-
-instance Memorizable Word32 where
-  memorize = memorizeWord32
-  recall = recallWord32
-
-instance Memorizable Word64 where
-  memorize = memorizeWord64
-  recall = recallWord64
-
-instance Memorizable Word where
-  memorize = memorizeWord
-  recall = recallWord
-
-instance Memorizable Int8 where
-  memorize = memorizeInt8
-  recall = recallInt8
-
-instance Memorizable Int16 where
-  memorize = memorizeInt16
-  recall = recallInt16
-
-instance Memorizable Int32 where
-  memorize = memorizeInt32
-  recall = recallInt32
-
-instance Memorizable Int64 where
-  memorize = memorizeInt64
-  recall = recallInt64
-
-instance Memorizable Int where
-  memorize = memorizeInt
-  recall = recallInt
 
 {-# INLINE memorizeWord8 #-}
 memorizeWord8 :: Word8 -> BS.ByteString
@@ -194,6 +154,22 @@ memorizeInt = memorizeWord64 . fromIntegral
 {-# INLINE recallInt #-}
 recallInt :: BS.ByteString -> Int
 recallInt = fromIntegral . recallWord64
+
+{-# INLINE memorizeDouble #-}
+memorizeDouble :: Double -> BS.ByteString
+memorizeDouble = memorizeWord64 . doubleToWord
+
+{-# INLINE recallDouble #-}
+recallDouble :: BS.ByteString -> Double
+recallDouble = wordToDouble . recallWord64
+
+{-# INLINE memorizeFloat #-}
+memorizeFloat :: Float -> BS.ByteString
+memorizeFloat = memorizeWord32 . floatToWord
+
+{-# INLINE recallFloat #-}
+recallFloat :: BS.ByteString -> Float
+recallFloat = wordToFloat . recallWord32
 
 memorizeInteger :: Integer -> BS.ByteString
 memorizeInteger n = {-# SCC memorizeInteger #-}
@@ -326,4 +302,64 @@ unLengthPrefix65535 :: (BS.ByteString -> t)
                     -> r
 unLengthPrefix65535 = unLengthPrefix (fromIntegral . recallWord16)
                                      2
+
+--
+-- Instances
+--
+
+instance Memorizable BS.ByteString where
+  memorize = id
+  recall = id
+
+instance Memorizable Word8 where
+  memorize = memorizeWord8
+  recall = recallWord8
+
+instance Memorizable Word16 where
+  memorize = memorizeWord16
+  recall = recallWord16
+
+instance Memorizable Word32 where
+  memorize = memorizeWord32
+  recall = recallWord32
+
+instance Memorizable Word64 where
+  memorize = memorizeWord64
+  recall = recallWord64
+
+instance Memorizable Word where
+  memorize = memorizeWord
+  recall = recallWord
+
+instance Memorizable Int8 where
+  memorize = memorizeInt8
+  recall = recallInt8
+
+instance Memorizable Int16 where
+  memorize = memorizeInt16
+  recall = recallInt16
+
+instance Memorizable Int32 where
+  memorize = memorizeInt32
+  recall = recallInt32
+
+instance Memorizable Int64 where
+  memorize = memorizeInt64
+  recall = recallInt64
+
+instance Memorizable Int where
+  memorize = memorizeInt
+  recall = recallInt
+
+instance Memorizable Integer where
+  memorize = memorizeInteger
+  recall = recallInteger
+
+instance Memorizable Double where
+  memorize = memorizeDouble
+  recall = recallDouble
+
+instance Memorizable Float where
+  memorize = memorizeFloat
+  recall = recallFloat
 
