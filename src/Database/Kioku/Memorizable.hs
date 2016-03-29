@@ -19,6 +19,9 @@ module Database.Kioku.Memorizable
   , memorizeDouble, recallDouble
   , memorizeFloat, recallFloat
 
+  , memorizeText, recallText
+  , memorizeEnum, recallEnum
+
   , roll
   , unroll
 
@@ -38,6 +41,8 @@ import qualified  Data.ByteString.Unsafe as UBS
 import            Data.Bits
 import            Data.Int
 import            Data.ReinterpretCast
+import            Data.Text (Text)
+import qualified  Data.Text.Encoding as E
 import            Data.Word
 
 class Memorizable a where
@@ -51,6 +56,14 @@ memorizeWord8 = BS.singleton
 {-# INLINE recallWord8 #-}
 recallWord8 :: BS.ByteString -> Word8
 recallWord8 = BS.head
+
+{-# INLINE memorizeText #-}
+memorizeText :: Text -> BS.ByteString
+memorizeText = E.encodeUtf8
+
+{-# INLINE recallText #-}
+recallText :: BS.ByteString -> Text
+recallText = E.decodeUtf8
 
 memorizeWord16 :: Word16 -> BS.ByteString
 memorizeWord16 n = {-# SCC memorizeWord16 #-}
@@ -171,6 +184,14 @@ memorizeFloat = memorizeWord32 . floatToWord
 recallFloat :: BS.ByteString -> Float
 recallFloat = wordToFloat . recallWord32
 
+{-# INLINE memorizeEnum #-}
+memorizeEnum :: Enum a => a -> BS.ByteString
+memorizeEnum = memorizeInteger . fromIntegral . fromEnum
+
+{-# INLINE recallEnum #-}
+recallEnum :: Enum a => BS.ByteString -> a
+recallEnum = toEnum . fromIntegral . recallInteger
+
 memorizeInteger :: Integer -> BS.ByteString
 memorizeInteger n = {-# SCC memorizeInteger #-}
     if len < fromIntegral maxWord8
@@ -237,11 +258,11 @@ unNullDelimit = undelimit 0
 type MemorizeLength = Int -> BS.ByteString
 type RecallLength = BS.ByteString -> Int
 type LengthSize = Int
-type PrefixedFieldDecoder a t b r =
+type PrefixedFieldDecoder a t b r v =
      RecallLength
   -> LengthSize
   -> (a -> BS.ByteString -> b)
-  -> (BS.ByteString -> t)
+  -> (v -> t)
   -> BS.ByteString
   -> r
 
@@ -257,26 +278,26 @@ lengthPrefix memorizeLength =
                          : addPrefixes rest
 
 {-# INLINE field #-}
-field :: PrefixedFieldDecoder a a b b
+field :: Memorizable v => PrefixedFieldDecoder a a b b v
 field recallLength lengthWidth cont f bs =
   let !len = recallLength bs
       !start = BS.drop lengthWidth bs
       !value = BS.take len start
       !rest = BS.drop len start
 
-  in cont (f value) rest
+  in cont (f $ recall value) rest
 
 {-# INLINE (&.) #-}
-(&.) :: PrefixedFieldDecoder (BS.ByteString -> b) t c r
-     -> PrefixedFieldDecoder a b c c
-     -> PrefixedFieldDecoder a t c r
+(&.) :: PrefixedFieldDecoder (w -> b) t c r v
+     -> PrefixedFieldDecoder a b c c w
+     -> PrefixedFieldDecoder a t c r v
 bc &. ab = \recallL size -> bc recallL size . ab recallL size
 
 {-# INLINE unLengthPrefix #-}
 unLengthPrefix :: RecallLength
                -> LengthSize
-               -> (BS.ByteString -> t)
-               -> PrefixedFieldDecoder a t a r
+               -> (v -> t)
+               -> PrefixedFieldDecoder a t a r v
                -> BS.ByteString
                -> r
 unLengthPrefix recallLength lengthWidth f decoder
@@ -285,8 +306,8 @@ unLengthPrefix recallLength lengthWidth f decoder
 lengthPrefix255 :: [BS.ByteString] -> BS.ByteString
 lengthPrefix255 = lengthPrefix (memorizeWord8 . fromIntegral)
 
-unLengthPrefix255 :: (BS.ByteString -> t)
-                  -> PrefixedFieldDecoder a t a r
+unLengthPrefix255 :: (v -> t)
+                  -> PrefixedFieldDecoder a t a r v
                   -> BS.ByteString
                   -> r
 unLengthPrefix255 = unLengthPrefix (fromIntegral . recallWord8)
@@ -296,12 +317,13 @@ lengthPrefix65535 :: [BS.ByteString] -> BS.ByteString
 lengthPrefix65535 = lengthPrefix (memorizeWord16 . fromIntegral)
 
 
-unLengthPrefix65535 :: (BS.ByteString -> t)
-                    -> PrefixedFieldDecoder a t a r
+unLengthPrefix65535 :: (v -> t)
+                    -> PrefixedFieldDecoder a t a r v
                     -> BS.ByteString
                     -> r
 unLengthPrefix65535 = unLengthPrefix (fromIntegral . recallWord16)
                                      2
+
 
 --
 -- Instances
@@ -310,6 +332,10 @@ unLengthPrefix65535 = unLengthPrefix (fromIntegral . recallWord16)
 instance Memorizable BS.ByteString where
   memorize = id
   recall = id
+
+instance Memorizable Text where
+  memorize = memorizeText
+  recall = recallText
 
 instance Memorizable Word8 where
   memorize = memorizeWord8
@@ -362,4 +388,24 @@ instance Memorizable Double where
 instance Memorizable Float where
   memorize = memorizeFloat
   recall = recallFloat
+
+instance Memorizable a => Memorizable (Maybe a) where
+  memorize Nothing = BS.singleton 0
+  memorize (Just a) = BS.cons 1 (memorize a)
+
+  recall bs =
+    case BS.head bs of
+    0 -> Nothing
+    1 -> Just $ recall $ BS.drop 1 bs
+    n -> error $ "recall: Invalid Maybe constructor index: " ++ show n
+
+instance (Memorizable a, Memorizable b) => Memorizable (Either a b) where
+  memorize (Left a) = BS.cons 0 (memorize a)
+  memorize (Right b) = BS.cons 1 (memorize b)
+
+  recall bs =
+    case BS.head bs of
+    0 -> Left $ recall $ BS.drop 1 bs
+    1 -> Right $ recall $ BS.drop 1 bs
+    n -> error $ "recall: Invalid Either constructor index: " ++ show n
 
