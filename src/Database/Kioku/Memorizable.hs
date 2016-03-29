@@ -98,7 +98,7 @@ recallWord32 bs = {-# SCC recallWord32 #-}
 memorizeWord64 :: Word64 -> BS.ByteString
 memorizeWord64 n = {-# SCC memorizeWord64 #-}
   BS.pack [
-    fromIntegral (n `unsafeShiftR` 54)
+    fromIntegral (n `unsafeShiftR` 56)
   , fromIntegral (n `unsafeShiftR` 48)
   , fromIntegral (n `unsafeShiftR` 40)
   , fromIntegral (n `unsafeShiftR` 32)
@@ -110,7 +110,7 @@ memorizeWord64 n = {-# SCC memorizeWord64 #-}
 
 recallWord64 :: BS.ByteString -> Word64
 recallWord64 bs = {-# SCC recallWord64 #-}
-  (     fromIntegral (bs `UBS.unsafeIndex` 0) `unsafeShiftL` 54
+  (     fromIntegral (bs `UBS.unsafeIndex` 0) `unsafeShiftL` 56
     .|. fromIntegral (bs `UBS.unsafeIndex` 1) `unsafeShiftL` 48
     .|. fromIntegral (bs `UBS.unsafeIndex` 2) `unsafeShiftL` 40
     .|. fromIntegral (bs `UBS.unsafeIndex` 3) `unsafeShiftL` 32
@@ -225,6 +225,7 @@ recallInteger bs = {-# SCC recallInteger #-}
         in applySign sign unsigned
   where
     {-# INLINE applySign #-}
+    applySign   0 n = n
     applySign   1 n = n
     applySign 255 n = -n
     applySign s _ = error $ "Invalid sign in recallInteger: " ++ show s
