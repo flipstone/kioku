@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -e
+
+mkdir -p example/data
+
+curl https://s3.amazonaws.com/kioku-example-data/cities.txt.gz -o example/data/cities.txt.gz
+curl https://s3.amazonaws.com/kioku-example-data/LICENSE -o example/data/LICENSE
+
