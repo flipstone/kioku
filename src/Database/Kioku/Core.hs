@@ -9,8 +9,8 @@ module Database.Kioku.Core
   , query, keyExact, keyPrefix
 
   , gcKiokuDB
-  , packKiokuDB
-  , exportKiokuDB
+  , packKiokuDB, exportKiokuDB
+  , unpackKiokuDB, importKiokuDB
   ) where
 
 import            Control.Concurrent.MVar
@@ -143,6 +143,16 @@ packKiokuDB db = do
 
 exportKiokuDB :: FilePath -> KiokuDB -> IO ()
 exportKiokuDB path db = packKiokuDB db >>= LBS.writeFile path
+
+unpackKiokuDB :: LBS.ByteString -> KiokuDB -> IO ()
+unpackKiokuDB gzBytes db = do
+  let tarBytes = GZ.decompress gzBytes
+      entries = Tar.read tarBytes
+
+  Tar.unpack (rootDir db) entries
+
+importKiokuDB :: FilePath -> KiokuDB -> IO ()
+importKiokuDB path db = LBS.readFile path >>= flip unpackKiokuDB db
 
 withKiokuDB :: FilePath -> (KiokuDB -> IO a) -> IO a
 withKiokuDB path action = do
