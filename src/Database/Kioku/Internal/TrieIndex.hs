@@ -4,18 +4,27 @@ module Database.Kioku.Internal.TrieIndex
   , writeIndex
   , trieLookup
   , trieMatch
+  , trieLookupMany
   ) where
 
 import            Control.Applicative
 import qualified  Data.ByteString as BS
+import qualified  Data.ByteString.Char8 as CBS
 import            Data.Foldable
 import            Data.Function
+import            Data.List
 import qualified  Data.Vector.Unboxed.Mutable as V
 import qualified  Data.Vector.Algorithms.AmericanFlag as S
 import            System.IO
 
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
+
+trieLookup :: BS.ByteString -> TrieIndex -> [Int]
+trieLookup key = maybe [] trieRootElems . lookupSubtrie key
+
+trieMatch :: BS.ByteString -> TrieIndex -> [Int]
+trieMatch prefix = maybe [] trieElems . lookupSubtrie prefix
 
 bufferTrieIndex :: Buffer -> TrieIndex
 bufferTrieIndex buf =
@@ -29,6 +38,7 @@ data TrieIndex = TI {
   , _tiArcDrop :: Int
   , _tiRoot :: Int
   }
+
 
 lookupSubtrie :: BS.ByteString -> TrieIndex -> Maybe TrieIndex
 lookupSubtrie key (TI buf rootDrop root) =
@@ -59,22 +69,128 @@ lookupSubtrie key (TI buf rootDrop root) =
          (_, "") -> trySubtries subtries
          _ -> Nothing
 
+data MultiKey = MultiKey {
+    mkPrefix :: !BS.ByteString
+  , _mkChildren :: ![MultiKey]
+  } deriving (Eq)
+
+instance Show MultiKey where
+  show mk =
+      "MultiKey\n" ++ go "  " mk
+    where
+      go indent (MultiKey pre kids) =
+           indent ++ CBS.unpack pre ++ "\n"
+        ++ concatMap (go (' ':' ':indent)) kids
+
+mkInsert :: MultiKey -> BS.ByteString -> MultiKey
+mkInsert (MultiKey "" []) key = MultiKey key []
+mkInsert (MultiKey parent kids) key =
+  case breakCommonPrefix parent key of
+  (_, "", new) ->
+    case kids of
+    (first:rest) ->
+      case mkInsert first new of
+      (MultiKey "" newKids) -> MultiKey parent (newKids ++ rest)
+      newKid -> MultiKey parent (newKid : rest)
+
+    _ -> MultiKey parent (MultiKey new [] : kids)
+
+  (newParent, old, "") ->
+    MultiKey newParent [MultiKey old kids]
+
+  (newParent, old, new) ->
+    let oldKey = MultiKey old kids
+        newKey = MultiKey new []
+    in MultiKey newParent [newKey, oldKey]
+
+mkMultiKey :: [BS.ByteString] -> MultiKey
+mkMultiKey [] = error "Can't build MultiKey with no keys!"
+mkMultiKey keys =
+  let (first:rest) = nub (sortBy (flip compare) keys)
+  in foldl' mkInsert (MultiKey first []) rest
+
+data DecodedNode = DecodedNode {
+    d_arc :: BS.ByteString
+  , d_subtrieCount :: Int
+  , d_readSubtrieN :: Int -> Int
+  , d_valueCount :: Int
+  , d_readValueN :: Int -> Int
+  }
+
+decodeNode :: Buffer -> Int -> DecodedNode
+decodeNode buf offset =
+    DecodedNode {
+      d_arc = extractBufRange buf (offset + 8) arcLen
+    , d_subtrieCount = stCount
+    , d_readSubtrieN = \n -> readBufAt buf (subtrieOffset + 8 + 8*n)
+    , d_valueCount = readBufAt buf valueOffset
+    , d_readValueN = \n -> readBufAt buf (valueOffset + 8 + 8*n)
+    }
+  where
+    arcLen = readBufAt buf offset
+    subtrieOffset = offset + 8 + arcLen
+    stCount = readBufAt buf subtrieOffset
+    valueOffset = subtrieOffset + 8 * (1 + stCount)
+
+trieLookupMany :: [BS.ByteString] -> TrieIndex -> [Int]
+trieLookupMany [] _ = []
+trieLookupMany keys (TI buf rootDrop root) =
+    go (mkMultiKey keys) rootDrop root []
+  where
+    go (MultiKey subkey kids) arcDrop offset rest =
+      let DecodedNode {
+            d_arc = fullArc
+          , d_subtrieCount = subtrieCount
+          , d_readSubtrieN = readSubtrieN
+          , d_valueCount = valueCount
+          , d_readValueN = readValueN
+          } = decodeNode buf offset
+
+          arc = BS.drop arcDrop fullArc
+          (_, remainingKey, remainingArc) = breakCommonPrefix subkey arc
+
+          trySubtries key n cont
+            | n < subtrieCount =
+              go key
+                 0
+                 (readSubtrieN n)
+                 (trySubtries key (n + 1) cont)
+
+            | otherwise =
+              cont
+
+          goKids [] = rest
+          goKids (kid:restKids) =
+            case breakCommonPrefix (mkPrefix kid) remainingArc of
+              (_, "", "") ->
+                readValues 0 (goKids restKids)
+              (_, remainingKid, "") ->
+                trySubtries (kid { mkPrefix = remainingKid })
+                            0
+                            (goKids restKids)
+
+              _ -> goKids restKids
+
+          readValues n cont
+            | n < valueCount = readValueN n : readValues (n + 1) cont
+            | otherwise = cont
+
+      in case (remainingKey, remainingArc) of
+         ("", "") -> readValues 0 (goKids kids)
+         (_, "") -> trySubtries (MultiKey remainingKey kids) 0 rest
+         _ -> rest
+
 trieElems :: TrieIndex -> [Int]
 trieElems (TI buf _ rootOffset) =
-    readValues $ valueListOffsets rootOffset []
+    valueListOffsets rootOffset []
   where
     valueListOffsets offset rest =
-      let arcLen = readBufAt buf offset
-
-          subtrieOffset = offset + 8 + arcLen
-
-          subtrieCount :: Int
-          subtrieCount = readBufAt buf subtrieOffset
-
-          readSubtrieN :: Int -> Int
-          readSubtrieN n = readBufAt buf (subtrieOffset + 8 + 8*n)
-
-          valueOffset = subtrieOffset + 8 * (1 + subtrieCount)
+      let DecodedNode {
+            d_subtrieCount = subtrieCount
+          , d_readSubtrieN = readSubtrieN
+          , d_valueCount = valueCount
+          , d_readValueN = readValueN
+          } = decodeNode buf offset
 
           goSubtries n
             | n < subtrieCount =
@@ -82,55 +198,30 @@ trieElems (TI buf _ rootOffset) =
 
             | otherwise = rest
 
-      in valueOffset : goSubtries 0
-
-    readValues [] = []
-    readValues (offset:rest) =
-      let valueCount :: Int
-          valueCount = readBufAt buf offset
-
-          readValueN :: Int -> Int
-          readValueN n = readBufAt buf (offset + 8 + 8*n)
-
           goValues n
             | n < valueCount = readValueN n : goValues (n + 1)
-            | otherwise = readValues rest
+            | otherwise = goSubtries 0
 
       in goValues 0
 
 trieRootElems :: TrieIndex -> [Int]
 trieRootElems (TI buf arcDrop offset) =
-    let arcLen = readBufAt buf offset
-
-        subtrieOffset = offset + 8 + arcLen
-
-        subtrieCount :: Int
-        subtrieCount = readBufAt buf subtrieOffset
-
-        valueOffset = subtrieOffset + 8 * (1 + subtrieCount)
-
-        valueCount :: Int
-        valueCount = readBufAt buf valueOffset
-
-        readValueN :: Int -> Int
-        readValueN n = readBufAt buf (valueOffset + 8 + 8*n)
+    let DecodedNode {
+          d_arc = arc
+        , d_valueCount = valueCount
+        , d_readValueN = readValueN
+        } = decodeNode buf offset
 
         goValues n
           | n < valueCount = readValueN n : goValues (n + 1)
           | otherwise = []
 
-        valuesAtRoot = arcLen == arcDrop
+        valuesAtRoot = BS.length arc == arcDrop
 
     in if valuesAtRoot
        then goValues 0
        else []
 
-
-trieLookup :: BS.ByteString -> TrieIndex -> [Int]
-trieLookup key = maybe [] trieRootElems . lookupSubtrie key
-
-trieMatch :: BS.ByteString -> TrieIndex -> [Int]
-trieMatch prefix = maybe [] trieElems . lookupSubtrie prefix
 
 writeIndex :: Memorizable a
            => (a -> BS.ByteString)

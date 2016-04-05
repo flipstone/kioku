@@ -6,7 +6,7 @@ module Database.Kioku.Core
 
   , createDataSet
   , createIndex
-  , query, keyExact, keyPrefix
+  , query, keyExact, keyExactIn, keyPrefix
 
   , gcKiokuDB
   , packKiokuDB, exportKiokuDB
@@ -53,9 +53,6 @@ dataDir db = rootDir db </> dataPath
 
 tmpDir :: KiokuDB -> FilePath
 tmpDir db = rootDir db </> tmpPath
-
-objDir :: KiokuDB -> FilePath
-objDir db = rootDir db </> objPath
 
 dataSetObjDir :: KiokuDB -> FilePath
 dataSetObjDir db = rootDir db </> dataSetObjPath
@@ -223,9 +220,9 @@ createDataSet name as db = do
   count <- hWriteRows as h
   hClose h
 
-  dataHash <- hashFile tmpFile
-  renameFile tmpFile (dataFilePath db dataHash)
-  writeDataSetFile name (DataSetFile { dataSetHash = dataHash }) db
+  sha <- hashFile tmpFile
+  renameFile tmpFile (dataFilePath db sha)
+  writeDataSetFile name (DataSetFile { dataSetHash = sha }) db
   pure count
 
 hWriteRows :: Memorizable a => [a] -> Handle -> IO Int
@@ -263,10 +260,10 @@ createIndex dataSetName indexName keyFunc db = do
     hClose h
     pure tmpFile
 
-  indexHash <- hashFile tmpFile
-  renameFile tmpFile (dataFilePath db indexHash)
+  sha <- hashFile tmpFile
+  renameFile tmpFile (dataFilePath db sha)
 
-  let indexFile = IndexFile { indexHash = indexHash
+  let indexFile = IndexFile { indexHash = sha
                             , dataHash = dataSetHash dataSetFile
                             }
 
@@ -291,6 +288,9 @@ newtype KiokuQuery = KQ { kqFunc :: TrieIndex -> [Int] }
 
 keyExact :: BS.ByteString -> KiokuQuery
 keyExact key = KQ (trieLookup key)
+
+keyExactIn :: [BS.ByteString] -> KiokuQuery
+keyExactIn key = KQ (trieLookupMany key)
 
 keyPrefix :: BS.ByteString -> KiokuQuery
 keyPrefix key = KQ (trieMatch key)
