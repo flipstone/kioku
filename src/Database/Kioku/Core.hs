@@ -1,5 +1,5 @@
 module Database.Kioku.Core
-  ( KiokuDB
+  ( KiokuDB, KiokuQuery
   , DataSetName, IndexName
   , openKiokuDB, defaultKiokuPath
   , closeKiokuDB, withKiokuDB
