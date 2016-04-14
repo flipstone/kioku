@@ -21,9 +21,13 @@ library
   exposed-modules:     Database.Kioku
                      , Database.Kioku.Core
                      , Database.Kioku.Memorizable
+                     , Database.Kioku.Schema
 
   other-modules:       Database.Kioku.Internal.Buffer
+                     , Database.Kioku.Internal.BufferMap
+                     , Database.Kioku.Internal.KiokuDB
                      , Database.Kioku.Internal.TrieIndex
+                     , Database.Kioku.Internal.Query
 
   default-extensions:  OverloadedStrings
 
