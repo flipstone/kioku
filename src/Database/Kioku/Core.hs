@@ -190,7 +190,7 @@ hashFile = fmap (Base16.encode . hashlazy) . LBS.readFile
 
 createSchema :: SchemaName -> [IndexName] -> KiokuDB -> IO ()
 createSchema name indexNames db = do
-  let readSchemaIndex idxName = SchemaIndex idxName <$> (throwErrors $ readIndexFile name db)
+  let readSchemaIndex idxName = SchemaIndex idxName <$> (throwErrors $ readIndexFile idxName db)
   indexes <- traverse readSchemaIndex indexNames
   writeSchemaFile name (SchemaFile indexes) db
 
