@@ -1,5 +1,5 @@
 module Database.Kioku.Core
-  ( KiokuDB, KiokuQuery
+  ( KiokuDB, KiokuQuery, KiokuException
   , DataSetName, IndexName, SchemaName
   , openKiokuDB, defaultKiokuPath
   , closeKiokuDB, withKiokuDB
@@ -9,7 +9,7 @@ module Database.Kioku.Core
   , createSchema
   , query, keyExact, keyExactIn, keyPrefix
 
-  , gcKiokuDB
+  , gcKiokuDB, validateDB
   , packKiokuDB, exportKiokuDB
   , unpackKiokuDB, importKiokuDB
   ) where
@@ -25,13 +25,16 @@ import qualified  Data.ByteString.Lazy as LBS
 import            Data.IORef
 import            Data.Foldable
 import            Data.List ((\\))
+import            Data.Maybe
 import qualified  Data.Map.Strict as M
 import            Data.Traversable
+import            Data.Typeable
 import            Foreign.Ptr
 import            System.Directory
 import            System.FilePath
 import            System.IO
 import            System.IO.MMap
+import            System.IO.Temp
 
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Internal.TrieIndex
@@ -41,6 +44,11 @@ data KiokuDB = KiokuDB {
     rootDir :: FilePath
   , openBuffers :: MVar (M.Map BS.ByteString (Ptr (), Int, Buffer))
   }
+
+newtype KiokuException = KiokuException String
+  deriving (Show, Typeable)
+
+instance Exception KiokuException
 
 dataPath,tmpPath,objPath,dataSetObjPath,indexObjPath,schemaObjPath :: FilePath
 dataPath = "data"
@@ -95,6 +103,7 @@ openKiokuDB path = do
             , tmpDir db
             , dataSetObjDir db
             , indexObjDir db
+            , schemaObjDir db
             ]
 
   pure db
@@ -106,6 +115,44 @@ closeKiokuDB db = do
       munmapFilePtr ptr rawSize
 
     pure M.empty
+
+validateDB :: KiokuDB -> IO [KiokuException]
+validateDB db = do
+    dataErrs <- validateDataFiles
+    indexErrs <- validateIndexFiles
+    schemaErrs <- validateSchemaFiles
+
+    pure $ catMaybes $ dataErrs ++ indexErrs ++ schemaErrs
+  where
+    validateDataFiles = do
+      paths <- listDirectoryContents $ dataDir db
+
+      for paths $ \name -> do
+        let bsName = BS.pack name
+            fileName = dataFilePath db bsName
+
+        sha <- hashFile fileName
+
+        pure $
+          if sha == bsName
+            then Nothing
+            else Just $ KiokuException $ "Data file " ++ name ++ " is corrupt!"
+
+    validateIndexFiles = do
+      paths <- listDirectoryContents $ indexObjDir db
+
+      for paths $ \name -> do
+        index <- readIndexFile name db
+        pure $ either Just (const Nothing) index
+
+    validateSchemaFiles = do
+      paths <- listDirectoryContents $ schemaObjDir db
+
+      for paths $ \name -> do
+        index <- readSchemaFile name db
+        pure $ either Just (const Nothing) index
+
+
 
 gcKiokuDB :: KiokuDB -> IO ()
 gcKiokuDB db = do
@@ -138,7 +185,7 @@ gcKiokuDB db = do
       paths <- listDirectoryContents $ indexObjDir db
 
       for paths $ \name -> do
-        indexFile <- readIndexFile name db
+        indexFile <- throwErrors $ readIndexFile name db
         pure $ indexRefs indexFile
 
 
@@ -146,11 +193,12 @@ gcKiokuDB db = do
       paths <- listDirectoryContents $ schemaObjDir db
 
       for paths $ \name -> do
-        schema <- readSchemaFile name db
+        schema <- throwErrors $ readSchemaFile name db
         pure $ concatMap (indexRefs . indexContent) $ schemaIndexes schema
 
-    listDirectoryContents dir =
-      filter (not . (`elem` [".",".."])) <$> getDirectoryContents dir
+listDirectoryContents :: FilePath -> IO [FilePath]
+listDirectoryContents dir =
+  filter (not . (`elem` [".",".."])) <$> getDirectoryContents dir
 
 packKiokuDB :: KiokuDB -> IO LBS.ByteString
 packKiokuDB db = do
@@ -168,7 +216,26 @@ unpackKiokuDB gzBytes db = do
   Tar.unpack (rootDir db) entries
 
 importKiokuDB :: FilePath -> KiokuDB -> IO ()
-importKiokuDB path db = LBS.readFile path >>= flip unpackKiokuDB db
+importKiokuDB path db = do
+  withTempDirectory (tmpDir db) "import." $ \tmpDBPath -> do
+    withKiokuDB tmpDBPath $ \tmpDB -> do
+      LBS.readFile path >>= flip unpackKiokuDB tmpDB
+      errors <- validateDB tmpDB
+
+      case errors of
+        [] -> do
+          let eachFile dir action = listDirectoryContents dir >>= mapM_ action
+              rename pathFunc name = renameFile (pathFunc tmpDB name) (pathFunc db name)
+
+          eachFile (dataDir tmpDB) (rename $ \d p -> dataFilePath d (BS.pack p))
+          eachFile (indexObjDir tmpDB) (rename indexObjFile)
+          eachFile (schemaObjDir tmpDB) (rename schemaObjFile)
+
+        _ -> do
+          let msg = "Found the following errors while validating the db import. The import has been abandoned to avoid corrupting the database."
+              errStrings = map show errors
+          throwIO $ KiokuException $ unlines (msg:errStrings)
+
 
 withKiokuDB :: FilePath -> (KiokuDB -> IO a) -> IO a
 withKiokuDB path action = do
@@ -220,13 +287,17 @@ data IndexFile = IndexFile {
   , dataHash :: BS.ByteString
   }
 
-readIndexFile :: IndexName -> KiokuDB -> IO IndexFile
+throwErrors :: IO (Either KiokuException a) -> IO a
+throwErrors action = action >>= either throwIO pure
+
+readIndexFile :: IndexName -> KiokuDB -> IO (Either KiokuException IndexFile)
 readIndexFile name db = do
   indexBytes <- BS.readFile (indexObjFile db name)
 
-  case BS.lines indexBytes of
+  pure $
+    case BS.lines indexBytes of
     [idx, dat] -> pure $ IndexFile idx dat
-    _ -> error $ "Index " ++ show name ++ " is corrupt!"
+    _ -> Left $ KiokuException $ "Index " ++ show name ++ " is corrupt!"
 
 writeIndexFile :: IndexName -> IndexFile -> KiokuDB -> IO ()
 writeIndexFile name file db =
@@ -252,22 +323,22 @@ writeSchemaFile name file db = do
                                , dataHash $ indexContent idx
                                ]
 
-readSchemaFile :: SchemaName -> KiokuDB -> IO SchemaFile
+readSchemaFile :: SchemaName -> KiokuDB -> IO (Either KiokuException SchemaFile)
 readSchemaFile name db = do
   schemaBytes <- BS.readFile $ schemaObjFile db name
 
   let indexLines = BS.lines schemaBytes
       parseIndex line = case BS.words line of
-                        [name, idx, dat] -> SchemaIndex (BS.unpack name) (IndexFile idx dat)
-                        _ -> error $ "Schema " ++ show name ++ " is corrupt!"
+                        [idxName, idx, dat] -> pure $ SchemaIndex (BS.unpack idxName) (IndexFile idx dat)
+                        _ -> Left $ KiokuException $ "Schema " ++ show name ++ " is corrupt!"
 
-      indexes = map parseIndex indexLines
+      indexes = traverse parseIndex indexLines
 
-  pure $ SchemaFile indexes
+  pure $ fmap SchemaFile indexes
 
 createSchema :: SchemaName -> [IndexName] -> KiokuDB -> IO ()
 createSchema name indexNames db = do
-  let readSchemaIndex name = SchemaIndex name <$> readIndexFile name db
+  let readSchemaIndex idxName = SchemaIndex idxName <$> (throwErrors $ readIndexFile name db)
   indexes <- traverse readSchemaIndex indexNames
   writeSchemaFile name (SchemaFile indexes) db
 
@@ -308,11 +379,11 @@ createIndex :: Memorizable a
             -> (a -> BS.ByteString)
             -> KiokuDB
             -> IO ()
-createIndex dataSetName indexName keyFunc db = do
+createIndex dataSetName idxName keyFunc db = do
   dataSetFile <- readDataSetFile dataSetName db
   dataBuf <- openBuffer (dataSetHash dataSetFile) db
   tmpFile <- writeIndex keyFunc dataBuf $ \flushIndex -> do
-    (tmpFile, h) <- openTempFile (tmpDir db) indexName
+    (tmpFile, h) <- openTempFile (tmpDir db) idxName
     flushIndex h
     hClose h
     pure tmpFile
@@ -324,7 +395,7 @@ createIndex dataSetName indexName keyFunc db = do
                             , dataHash = dataSetHash dataSetFile
                             }
 
-  writeIndexFile indexName indexFile db
+  writeIndexFile idxName indexFile db
 
 query :: Memorizable a
       => IndexName
@@ -332,7 +403,7 @@ query :: Memorizable a
       -> KiokuDB
       -> IO [a]
 query name kQuery db = do
-  indexFile <- readIndexFile name db
+  indexFile <- throwErrors $ readIndexFile name db
   index <- bufferTrieIndex <$> openBuffer (indexHash indexFile) db
 
   let offsets = kqFunc kQuery index
