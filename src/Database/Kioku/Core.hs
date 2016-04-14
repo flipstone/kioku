@@ -1,11 +1,12 @@
 module Database.Kioku.Core
   ( KiokuDB, KiokuQuery
-  , DataSetName, IndexName
+  , DataSetName, IndexName, SchemaName
   , openKiokuDB, defaultKiokuPath
   , closeKiokuDB, withKiokuDB
 
   , createDataSet
   , createIndex
+  , createSchema
   , query, keyExact, keyExactIn, keyPrefix
 
   , gcKiokuDB
@@ -41,12 +42,13 @@ data KiokuDB = KiokuDB {
   , openBuffers :: MVar (M.Map BS.ByteString (Ptr (), Int, Buffer))
   }
 
-dataPath,tmpPath,objPath,dataSetObjPath,indexObjPath :: FilePath
+dataPath,tmpPath,objPath,dataSetObjPath,indexObjPath,schemaObjPath :: FilePath
 dataPath = "data"
 tmpPath = "tmp"
 objPath = "objects"
 dataSetObjPath = objPath </> "data_set"
 indexObjPath = objPath </> "index"
+schemaObjPath = objPath </> "schema"
 
 dataDir :: KiokuDB -> FilePath
 dataDir db = rootDir db </> dataPath
@@ -60,17 +62,24 @@ dataSetObjDir db = rootDir db </> dataSetObjPath
 indexObjDir :: KiokuDB -> FilePath
 indexObjDir db = rootDir db </> indexObjPath
 
+schemaObjDir :: KiokuDB -> FilePath
+schemaObjDir db = rootDir db </> schemaObjPath
+
 dataSetObjFile :: KiokuDB -> DataSetName -> FilePath
 dataSetObjFile db name = dataSetObjDir db </> name
 
 indexObjFile :: KiokuDB -> IndexName -> FilePath
 indexObjFile db name = indexObjDir db </> name
 
+schemaObjFile :: KiokuDB -> SchemaName -> FilePath
+schemaObjFile db name = schemaObjDir db </> name
+
 dataFilePath :: KiokuDB -> BS.ByteString -> FilePath
 dataFilePath db sha = dataDir db </> BS.unpack sha
 
 type DataSetName = String
 type IndexName = String
+type SchemaName = String
 
 defaultKiokuPath :: FilePath
 defaultKiokuPath = ".kioku"
@@ -113,7 +122,8 @@ gcKiokuDB db = do
     readHashRefs = do
       dataSets <- readDataSets
       indexes <- readIndexes
-      pure (dataSets ++ concat indexes)
+      schemaRefs <- readSchemas
+      pure (dataSets ++ concat indexes ++ concat schemaRefs)
 
     readDataSets = do
       paths <- listDirectoryContents $ dataSetObjDir db
@@ -122,20 +132,29 @@ gcKiokuDB db = do
         dataSetFile <- readDataSetFile name db
         pure (dataSetHash dataSetFile)
 
+    indexRefs index = [indexHash index, dataHash index]
+
     readIndexes = do
       paths <- listDirectoryContents $ indexObjDir db
 
       for paths $ \name -> do
         indexFile <- readIndexFile name db
-        pure [ indexHash indexFile, dataHash indexFile ]
+        pure $ indexRefs indexFile
 
+
+    readSchemas = do
+      paths <- listDirectoryContents $ schemaObjDir db
+
+      for paths $ \name -> do
+        schema <- readSchemaFile name db
+        pure $ concatMap (indexRefs . indexContent) $ schemaIndexes schema
 
     listDirectoryContents dir =
       filter (not . (`elem` [".",".."])) <$> getDirectoryContents dir
 
 packKiokuDB :: KiokuDB -> IO LBS.ByteString
 packKiokuDB db = do
-  entries <- Tar.pack (rootDir db) [dataPath, dataSetObjPath, indexObjPath]
+  entries <- Tar.pack (rootDir db) [dataPath, dataSetObjPath, indexObjPath, schemaObjPath]
   pure $ GZ.compress $ Tar.write entries
 
 exportKiokuDB :: FilePath -> KiokuDB -> IO ()
@@ -213,6 +232,44 @@ writeIndexFile :: IndexName -> IndexFile -> KiokuDB -> IO ()
 writeIndexFile name file db =
   writeDBFile (indexObjFile db name)
               (BS.unlines [indexHash file, dataHash file])
+
+data SchemaIndex = SchemaIndex {
+    indexName :: IndexName
+  , indexContent :: IndexFile
+  }
+
+data SchemaFile = SchemaFile {
+    schemaIndexes :: [SchemaIndex]
+  }
+
+writeSchemaFile :: SchemaName -> SchemaFile -> KiokuDB -> IO ()
+writeSchemaFile name file db = do
+    writeDBFile (schemaObjFile db name) schemaData
+  where
+    schemaData = BS.unlines $ map indexLine $ schemaIndexes file
+    indexLine idx = BS.unwords [ BS.pack $ indexName idx
+                               , indexHash $ indexContent idx
+                               , dataHash $ indexContent idx
+                               ]
+
+readSchemaFile :: SchemaName -> KiokuDB -> IO SchemaFile
+readSchemaFile name db = do
+  schemaBytes <- BS.readFile $ schemaObjFile db name
+
+  let indexLines = BS.lines schemaBytes
+      parseIndex line = case BS.words line of
+                        [name, idx, dat] -> SchemaIndex (BS.unpack name) (IndexFile idx dat)
+                        _ -> error $ "Schema " ++ show name ++ " is corrupt!"
+
+      indexes = map parseIndex indexLines
+
+  pure $ SchemaFile indexes
+
+createSchema :: SchemaName -> [IndexName] -> KiokuDB -> IO ()
+createSchema name indexNames db = do
+  let readSchemaIndex name = SchemaIndex name <$> readIndexFile name db
+  indexes <- traverse readSchemaIndex indexNames
+  writeSchemaFile name (SchemaFile indexes) db
 
 createDataSet :: Memorizable a => DataSetName -> [a] -> KiokuDB -> IO Int
 createDataSet name as db = do
