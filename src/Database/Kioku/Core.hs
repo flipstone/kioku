@@ -15,6 +15,7 @@ module Database.Kioku.Core
   ) where
 
 import            Control.Exception
+import            Control.Monad
 import qualified  Codec.Archive.Tar as Tar
 import qualified  Codec.Compression.GZip as GZ
 import            Crypto.Hash.SHA256
@@ -168,11 +169,18 @@ importKiokuDB path db = do
       case errors of
         [] -> do
           let eachFile dir action = listDirectoryContents dir >>= mapM_ action
-              rename pathFunc name = renameFile (pathFunc tmpDB name) (pathFunc db name)
+              rename check pathFunc name = do let tmpName = pathFunc tmpDB name
+                                                  dbName = pathFunc db name
 
-          eachFile (dataDir tmpDB) (rename $ \d p -> dataFilePath d (BS.pack p))
-          eachFile (indexObjDir tmpDB) (rename indexObjFile)
-          eachFile (schemaObjDir tmpDB) (rename schemaObjFile)
+                                              checked <- check dbName
+                                              when checked $ renameFile tmpName dbName
+
+              renameAlways = rename (const $ pure True)
+              renameIfNew  = rename (fmap not . doesFileExist)
+
+          eachFile (dataDir tmpDB) (renameIfNew $ \d p -> dataFilePath d (BS.pack p))
+          eachFile (indexObjDir tmpDB) (renameAlways indexObjFile)
+          eachFile (schemaObjDir tmpDB) (renameAlways schemaObjFile)
 
         _ -> do
           let msg = "Found the following errors while validating the db import. The import has been abandoned to avoid corrupting the database."
