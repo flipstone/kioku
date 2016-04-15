@@ -21,13 +21,15 @@ import qualified  Codec.Compression.GZip as GZ
 import            Crypto.Hash.SHA256
 import qualified  Data.ByteString.Char8 as BS
 import qualified  Data.ByteString.Base16 as Base16
-import qualified  Data.ByteString.Lazy as LBS
+import qualified  Data.ByteString.Lazy.Char8 as LBS
+import            Data.Int
 import            Data.IORef
 import            Data.Foldable
-import            Data.List ((\\))
+import            Data.List ((\\), isPrefixOf, isInfixOf)
 import            Data.Maybe
 import            Data.Traversable
 import            System.Directory
+import            System.FilePath
 import            System.IO
 import            System.IO.Temp
 
@@ -152,18 +154,96 @@ packKiokuDB db = do
 exportKiokuDB :: FilePath -> KiokuDB -> IO ()
 exportKiokuDB path db = packKiokuDB db >>= LBS.writeFile path
 
+-- You should call validateDB after using this!
 unpackKiokuDB :: LBS.ByteString -> KiokuDB -> IO ()
 unpackKiokuDB gzBytes db = do
-  let tarBytes = GZ.decompress gzBytes
-      entries = Tar.read tarBytes
+    parseTar handleEntry (pure ()) $ GZ.decompress gzBytes
+  where
+    handleEntry tarPath typ stream =
+      case typ of
+      "0" -> do
+        checkPathSecurity tarPath
+        let path = rootDir db </> tarPath
+        join (writeBytes path stream)
 
-  Tar.unpack (rootDir db) entries
+      _ -> do
+        clistEnd stream
+
+    writeBytes path stream = do
+        createDirectoryIfMissing True (takeDirectory path)
+        bracket (openBinaryFile path WriteMode)
+                hClose
+                (go stream)
+      where
+        go (Done d) _ = pure d
+        go (Stream chunk rest) h = BS.hPut h chunk >> go rest h
+
+    checkPathSecurity p
+      | "/" `isPrefixOf` p ||
+        ".." `isInfixOf` p = throwIO $ KiokuException $ "Insecure file path found in kioku import: " ++ p
+
+      | otherwise = pure ()
+
+data CList a d =
+    Stream a (CList a d)
+  | Done d
+
+clistEnd :: CList a d -> d
+clistEnd (Done d) = d
+clistEnd (Stream _ l) = clistEnd l
+
+splitCList :: Int64 -> LBS.ByteString -> (LBS.ByteString -> d) -> CList BS.ByteString d
+splitCList total bs0 finish =
+    go total $ LBS.toChunks bs0
+  where
+    go _ [] = Done (finish $ LBS.fromChunks [])
+    go n chunks | n <= 0 = Done $ finish (LBS.fromChunks chunks)
+    go n (chunk:rest) =
+      if n > fromIntegral (BS.length chunk)
+      then Stream chunk (go (n - fromIntegral (BS.length chunk)) rest)
+      else let (bs, bsr) = BS.splitAt (fromIntegral n) chunk
+           in Stream bs (go 0 (bsr:rest))
+
+-- This is a terrible hand coded tar parser that avoids keeping the entire tar
+-- entry in ram while writing it to disk. This is useful for us because we have
+-- entries on the 100m order, but don't need that much ram to run in general
+--
+-- Note there is lots of potential badness here! We don't check checksums or
+-- anything like it. We assume that validateDB is going to take care of that
+-- during the import.
+--
+parseTar :: (FilePath -> LBS.ByteString -> CList BS.ByteString a -> a) -> a -> LBS.ByteString -> a
+parseTar handler done "" = done
+parseTar handler done bytes | bytes == (LBS.replicate 1024 '\0') = done
+parseTar handler done bytes =
+  let field off len = LBS.takeWhile (/= '\0') $ LBS.take 100 $ LBS.drop off bytes
+      name      = field   0 100
+      size      = field 124  12
+      typ       = field 156   1
+      prefix    = field 345 155
+      sizeInt   = read ("0o" ++ LBS.unpack size)
+      dataStart = LBS.drop 512 bytes
+
+      stream    = splitCList sizeInt dataStart $ \rest ->
+                    let (blocks, remainder) = sizeInt `divMod` 512
+                        blockSeek           = blocks + signum remainder
+                        blockPadding        = (blockSeek * 512) - sizeInt
+                    in parseTar handler done (LBS.drop blockPadding rest)
+
+
+      path    = case prefix of
+                "" -> LBS.unpack name
+                _ -> LBS.unpack prefix </> LBS.unpack name
+
+  in handler path typ stream
+
 
 importKiokuDB :: FilePath -> KiokuDB -> IO ()
 importKiokuDB path db = do
   withTempDirectory (tmpDir db) "import." $ \tmpDBPath -> do
     withKiokuDB tmpDBPath $ \tmpDB -> do
       LBS.readFile path >>= flip unpackKiokuDB tmpDB
+
       errors <- validateDB tmpDB
 
       case errors of
