@@ -1,6 +1,6 @@
 module Database.Kioku.Internal.Query
   ( KiokuQuery
-  , keyExact, keyExactIn, keyPrefix
+  , keyExact, keyExactIn, keyPrefix, firstStopAlong
   , runQuery
   ) where
 
@@ -20,6 +20,9 @@ keyExactIn key = KQ (trieLookupMany key)
 
 keyPrefix :: BS.ByteString -> KiokuQuery
 keyPrefix key = KQ (trieMatch key)
+
+firstStopAlong :: BS.ByteString -> KiokuQuery
+firstStopAlong path = KQ (trieFirstStopAlong path)
 
 runQuery :: Memorizable a
          => KiokuQuery

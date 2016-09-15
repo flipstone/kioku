@@ -30,17 +30,25 @@ main = do
 
       ("cities":"query":name:_) -> do
         cities <- query "cities.name" (keyPrefix $ CBS.pack name) db
-        for_ cities $ \city -> do
-          CBS.putStr   $ cityName city
-          CBS.putStr   $ " - ("
-          CBS.putStr   $ cityLat city
-          CBS.putStr   $ ","
-          CBS.putStr   $ cityLng city
-          CBS.putStrLn $ ")"
+        printCities cities
+
+      ("cities":"first_stop":name:_) -> do
+        cities <- query "cities.name" (firstStopAlong $ CBS.pack name) db
+        printCities cities
 
       _ -> do
         putStrLn $ "Unknown command: " ++ unwords args
         exitWith (ExitFailure 1)
+
+printCities :: [City] -> IO ()
+printCities cities =
+  for_ cities $ \city -> do
+    CBS.putStr   $ cityName city
+    CBS.putStr   $ " - ("
+    CBS.putStr   $ cityLat city
+    CBS.putStr   $ ","
+    CBS.putStr   $ cityLng city
+    CBS.putStrLn $ ")"
 
 data City = City {
     cityName :: BS.ByteString

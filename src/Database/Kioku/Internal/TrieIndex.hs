@@ -5,6 +5,7 @@ module Database.Kioku.Internal.TrieIndex
   , trieLookup
   , trieMatch
   , trieLookupMany
+  , trieFirstStopAlong
   ) where
 
 import            Control.Applicative
@@ -25,6 +26,18 @@ trieLookup key = maybe [] trieRootElems . lookupSubtrie key
 
 trieMatch :: BS.ByteString -> TrieIndex -> [Int]
 trieMatch prefix = maybe [] trieElems . lookupSubtrie prefix
+
+trieFirstStopAlong :: BS.ByteString -> TrieIndex -> [Int]
+trieFirstStopAlong "" _ = []
+trieFirstStopAlong path trie =
+    case lookupSubtrie p trie of
+      Nothing -> []
+      Just subtrie ->
+        case trieRootElems subtrie of
+        [] -> trieFirstStopAlong ath subtrie
+        elems -> elems
+  where
+    (p,ath) = BS.splitAt 1 path
 
 bufferTrieIndex :: Buffer -> TrieIndex
 bufferTrieIndex buf =
