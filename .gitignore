@@ -3,3 +3,4 @@ dist
 cabal.sandbox.config
 .kioku
 example/data
+.DS_Store
