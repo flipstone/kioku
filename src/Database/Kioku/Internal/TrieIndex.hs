@@ -14,6 +14,7 @@ import qualified  Data.ByteString.Char8 as CBS
 import            Data.Foldable
 import            Data.Function
 import            Data.List
+import qualified  Data.Proxy as P
 import qualified  Data.Vector.Unboxed.Mutable as V
 import qualified  Data.Vector.Algorithms.AmericanFlag as S
 import            System.IO
@@ -246,6 +247,13 @@ writeIndex keyFunc buf runWriter = do
   vec <- buildSortedOffsetArray keyFunc buf rowCount
   runWriter (writeTrieIndex keyFunc vec buf)
 
+-- The Lexicographic class exposes an extent field
+-- instead of terminate. However, the sortBy method
+-- still requires a parameter of (e -> Int -> Bool)
+-- so we replicate the terminate function here.
+terminate :: S.Lexicographic e => e -> Int -> Bool
+terminate e i = i >= S.extent e
+
 buildSortedOffsetArray :: Memorizable a
                        => (a -> BS.ByteString)
                        -> Buffer
@@ -256,10 +264,11 @@ buildSortedOffsetArray keyFunc buf rowCount = do
   collectRowPointers rowCount 0 0 vec buf
 
   let keyAt = keyFunc . readRowAt buf
+      proxy = P.Proxy :: P.Proxy BS.ByteString
 
   S.sortBy (compare `on` keyAt)
-           (S.terminate . keyAt)
-           (S.size BS.empty)
+           (terminate . keyAt)
+           (S.size proxy)
            (\n -> S.index n . keyAt)
            vec
 
