@@ -41,7 +41,7 @@ library
                      , filepath
                      , mmap
                      , vector
-                     , vector-algorithms
+                     , vector-algorithms >=  0.8.0.1
                      , reinterpret-cast
                      , tar
                      , temporary
