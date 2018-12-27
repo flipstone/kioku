@@ -33,7 +33,6 @@ import            System.FilePath
 import            System.IO
 import            System.IO.Temp
 
-import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Internal.BufferMap
 import            Database.Kioku.Internal.KiokuDB
 import            Database.Kioku.Internal.TrieIndex

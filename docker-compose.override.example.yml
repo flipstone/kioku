@@ -1,0 +1,11 @@
+version: '3'
+services:
+  dev:
+    environment:
+      STACK_ROOT: /stack-root
+    volumes:
+      - <your-stack-root-volume>:/stack-root
+
+volumes:
+  <your-stack-root-volume>:
+    external: true

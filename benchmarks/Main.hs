@@ -10,7 +10,7 @@ import            Database.Kioku.Memorizable
 main :: IO ()
 main = do
   let item = BenchItem "A B C " "It's as easy as" "1 2 3" "As simple as" "do re mi"
-      trials = 10 ^ 7
+      trials = (10 :: Int)  ^ (7 :: Int)
 
   bench trials "id" () id
   bench trials "(+1)" (1 :: Int) (+1)
@@ -46,7 +46,7 @@ bench count name a f = do
 
   where
     seqN 0 _ _ = ()
-    seqN n f a = f a `seq` seqN (n - 1) f a
+    seqN n f' a' = f' a' `seq` seqN (n - 1) f' a'
 
 
 data BenchItem = BenchItem {
@@ -87,12 +87,13 @@ recallPrefixed65535 =
 
 formatExponential :: Int -> Double -> String
 formatExponential precision d =
-    show (roundToPrec sig10) ++ "e" ++ show exp10Int
+  show (roundToPrec sig10) ++ "e" ++ show (exp10Int :: Int)
   where
-    roundToPrec d = let p = 10 ^^ precision
-                        n :: Integer
-                        n = round $ d * p
-                    in (realToFrac n) / p
+    roundToPrec d' =
+      let p = 10 ^^ precision
+          n :: Int
+          n = round $ d' * p
+      in (realToFrac n) / p
 
     sigRadix = significand d
     expRadix = exponent d

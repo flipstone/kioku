@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                kioku
-version:             0.1.2.0
+version:             0.1.2.1
 synopsis:            A library for indexing and querying static datasets on disk
 -- description:         
 homepage:            http://github.com/flipstone/kioku
@@ -17,7 +17,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  ghc-options:         -Wall -fprof-auto
+  ghc-options:         -Wall -fprof-auto -Werror
   exposed-modules:     Database.Kioku
                      , Database.Kioku.Core
                      , Database.Kioku.Memorizable
@@ -32,7 +32,7 @@ library
   default-extensions:  OverloadedStrings
 
   -- other-extensions:    
-  build-depends:       base >=4.8 && <4.9
+  build-depends:       base
                      , base16-bytestring
                      , bytestring
                      , containers
@@ -51,9 +51,9 @@ library
   default-language:    Haskell2010
 
 executable kioku-benchmarks
-  ghc-options:         -O3 -Wall -fprof-auto -rtsopts
+  ghc-options:         -O3 -Wall -fprof-auto -rtsopts -Werror
   default-extensions:  OverloadedStrings
-  build-depends:       base >=4.8 && <4.9
+  build-depends:       base
                      , bytestring
                      , time
 
@@ -63,9 +63,9 @@ executable kioku-benchmarks
   default-language:    Haskell2010
 
 executable kioku-example
-  ghc-options:         -O3 -Wall
+  ghc-options:         -O3 -Wall -Werror
   default-extensions:  OverloadedStrings
-  build-depends:       base >=4.8 && <4.9
+  build-depends:       base
                      , bytestring
                      , zlib
 
