@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                kioku
-version:             0.1.1.2
+version:             0.1.2.0
 synopsis:            A library for indexing and querying static datasets on disk
 -- description:         
 homepage:            http://github.com/flipstone/kioku

@@ -213,14 +213,14 @@ splitCList total bs0 finish =
 -- during the import.
 --
 parseTar :: (FilePath -> LBS.ByteString -> CList BS.ByteString a -> a) -> a -> LBS.ByteString -> a
-parseTar handler done "" = done
-parseTar handler done bytes | bytes == (LBS.replicate 1024 '\0') = done
+parseTar _ done "" = done
+parseTar _ done bytes | bytes == (LBS.replicate 1024 '\0') = done
 parseTar handler done bytes =
-  let field off len = LBS.takeWhile (/= '\0') $ LBS.take 100 $ LBS.drop off bytes
-      name      = field   0 100
-      size      = field 124  12
-      typ       = field 156   1
-      prefix    = field 345 155
+  let tarField off len = LBS.takeWhile (/= '\0') $ LBS.take len $ LBS.drop off bytes
+      name      = tarField   0 100
+      size      = tarField 124  12
+      typ       = tarField 156   1
+      prefix    = tarField 345 155
       sizeInt   = read ("0o" ++ LBS.unpack size)
       dataStart = LBS.drop 512 bytes
 
