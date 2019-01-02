@@ -1,0 +1,23 @@
+version: 2.1
+jobs:
+  build:
+    docker:
+      - image: flipstone/stack:v2-1.9.3
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - kioku-{{ arch }}-{{ .Branch }}-{{ checksum "package.yaml" }}
+            - kioku
+
+      - run:
+          command: stack build
+
+      - save_cache:
+          key: kioku-{{ arch }}-{{ .Branch }}-{{ checksum "package.yaml" }}
+          paths:
+              - /stack-root/
+              - ~/.stack
+              - ~/.stack-work

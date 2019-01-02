@@ -1,0 +1,53 @@
+name: kioku
+version: '0.1.2.1'
+synopsis: A library for indexing and querying static datasets on disk
+category: Database
+author: Flipstone Technology Partners
+maintainer: development@flipstone.com
+license: MIT
+homepage: http://github.com/flipstone/kioku
+default-extensions:
+- OverloadedStrings
+ghc-options:
+- -Wall
+- -fprof-auto
+- -Werror
+dependencies:
+- base >=4.8 && <4.13
+- bytestring
+- zlib
+library:
+  source-dirs: src
+  exposed-modules:
+  - Database.Kioku
+  - Database.Kioku.Core
+  - Database.Kioku.Memorizable
+  - Database.Kioku.Schema
+  dependencies:
+  - base16-bytestring
+  - containers
+  - cryptohash
+  - directory
+  - filepath
+  - mmap
+  - vector
+  - vector-algorithms >=0.8.0.1
+  - reinterpret-cast
+  - tar
+  - temporary
+  - text
+executables:
+  kioku-benchmarks:
+    main: benchmarks/Main.hs
+    ghc-options:
+    - -O3
+    - -rtsopts
+    dependencies:
+    - time
+    - kioku
+  kioku-example:
+    main: example/Main.hs
+    ghc-options:
+    - -O3
+    dependencies:
+    - kioku
