@@ -91,7 +91,7 @@ formatExponential precision d =
   where
     roundToPrec d' =
       let p = 10 ^^ precision
-          n :: Int
+          n :: Integer
           n = round $ d' * p
       in (realToFrac n) / p
 
