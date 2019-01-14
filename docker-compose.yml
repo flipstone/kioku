@@ -5,6 +5,3 @@ services:
     volumes:
       - .:/kioku
     working_dir: /kioku
-
-volumes:
-  stack-root:

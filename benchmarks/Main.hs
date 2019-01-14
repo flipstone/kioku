@@ -87,7 +87,7 @@ recallPrefixed65535 =
 
 formatExponential :: Int -> Double -> String
 formatExponential precision d =
-  show (roundToPrec sig10) ++ "e" ++ show (exp10Int :: Int)
+  show (roundToPrec sig10) ++ "e" ++ show exp10Int
   where
     roundToPrec d' =
       let p = 10 ^^ precision
@@ -100,7 +100,10 @@ formatExponential precision d =
     radix = realToFrac $ floatRadix d
 
     exp10 = realToFrac expRadix * log radix / log 10
+
+    exp10Int :: Int
     exp10Int = floor exp10
+
     exp10Frac = exp10 - realToFrac exp10Int
 
     sig10 = sigRadix * (10 ** exp10Frac)
