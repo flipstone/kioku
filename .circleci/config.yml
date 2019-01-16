@@ -9,15 +9,14 @@ jobs:
 
       - restore_cache:
           keys:
-            - kioku-{{ arch }}-{{ .Branch }}-{{ checksum "package.yaml" }}
+            - kioku-{{ arch }}-{{ .Branch }}
             - kioku
 
       - run:
           command: stack build
 
       - save_cache:
-          key: kioku-{{ arch }}-{{ .Branch }}-{{ checksum "package.yaml" }}
+          key: kioku-{{ arch }}-{{ .Branch }}-{{ epoch }}
           paths:
               - /stack-root/
-              - ~/.stack
               - ~/.stack-work
