@@ -50,8 +50,17 @@ printCities cities =
     CBS.putStr   $ cityLng city
     CBS.putStrLn $ ")"
 
-data City = City 
-  { cityName :: BS.ByteString
+data City = City
+  { cityGeoNameId :: BS.ByteString
+  , cityName :: BS.ByteString
+  , cityASCIIName :: BS.ByteString
+  , cityFeatureClass :: BS.ByteString
+  , cityFeatureCode :: BS.ByteString
+  , cityCountryCode :: BS.ByteString
+  , cityPopulation :: BS.ByteString
+  , cityElevation :: BS.ByteString
+  , cityTimeZone :: BS.ByteString
+  , cityAlternateNames :: BS.ByteString
   , cityLat :: BS.ByteString
   , cityLng :: BS.ByteString
   }
@@ -59,15 +68,33 @@ data City = City
 instance Memorizable City where
   memorize (City {..}) =
     lengthPrefix255
-      [ memorize cityName
+      [ memorize cityGeoNameId
+      , memorize cityName
+      , memorize cityASCIIName
+      , memorize cityFeatureClass
+      , memorize cityFeatureCode
+      , memorize cityCountryCode
+      , memorize cityPopulation
+      , memorize cityElevation
+      , memorize cityTimeZone
+      , memorize cityAlternateNames
       , memorize cityLat
       , memorize cityLng
       ]
 
   recall =
-    unLengthPrefix255 City (  field
-                           &. field
-                           &. field
+    unLengthPrefix255 City (  field -- geoNameId
+                           &. field -- name
+                           &. field -- asciiName
+                           &. field -- feature class
+                           &. field -- feature code
+                           &. field -- country code
+                           &. field -- population
+                           &. field -- elevation
+                           &. field -- timezone
+                           &. field -- alternate names
+                           &. field -- lat
+                           &. field -- lng
                            )
 
 loadCities :: FilePath -> IO [City]
@@ -79,9 +106,19 @@ parseCities bytes | LBS.null bytes = []
 parseCities bytes =
   let (line, lineRest) = LBS.break (== '\n') bytes
       parts = LBS.split '\t' line
+      geoNameId = LBS.toStrict (parts !! 0)
       name = LBS.toStrict (parts !! 1)
+      asciiName = LBS.toStrict (parts !! 2)
+      alternateNames = LBS.toStrict (parts !! 3)
+      featureClass = LBS.toStrict (parts !! 6)
+      featureCode = LBS.toStrict (parts !! 7)
+      countryCode = LBS.toStrict (parts !! 8)
+      population = LBS.toStrict (parts !! 14)
+      elevation = LBS.toStrict (parts !! 15)
+      timezone = LBS.toStrict (parts !! 17)
       lat = LBS.toStrict (parts !! 4)
       lng = LBS.toStrict (parts !! 5)
 
-  in (City name lat lng) : parseCities (LBS.drop 1 lineRest)
+  in (City geoNameId name asciiName featureClass featureCode countryCode population elevation timezone alternateNames lat lng) :
+        parseCities (LBS.drop 1 lineRest)
 

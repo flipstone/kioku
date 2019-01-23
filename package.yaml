@@ -46,7 +46,9 @@ executables:
     - time
     - kioku
   kioku-example:
-    main: example/Main.hs
+    main: example/BadMain.hs
+    default-extensions:
+    - RecordWildCards
     ghc-options:
     - -O3
     dependencies:
