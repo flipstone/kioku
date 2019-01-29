@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3901a84de1c3518594f00415166204eefbdf5cfda0478bc8ff29a964e8757262
+-- hash: 6dcc7790b2b94ee6db93213c0da956a03cf44740fb1c8c68dbaa4d39e340febe
 
 name:           kioku
 version:        0.1.2.1
@@ -67,7 +67,7 @@ executable kioku-benchmarks
   default-language: Haskell2010
 
 executable kioku-example
-  main-is: example/BadMain.hs
+  main-is: example/Main.hs
   other-modules:
       Paths_kioku
   default-extensions: OverloadedStrings RecordWildCards
