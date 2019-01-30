@@ -22,6 +22,8 @@ import            System.IO
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
 
+import Debug.Trace
+
 trieLookup :: BS.ByteString -> TrieIndex -> [Int]
 trieLookup key = maybe [] trieRootElems . lookupSubtrie key
 
@@ -151,7 +153,19 @@ trieLookupMany [] _ = []
 trieLookupMany keys (TI buf rootDrop root) =
     go (mkMultiKey keys) rootDrop root []
   where
-    go (MultiKey subkey kids) arcDrop offset rest =
+    go multikey@(MultiKey subkey kids) arcDrop offset rest =
+      let msg = concat [ "---------------\n"
+                       , "trieLookupMany go subkey: "
+                       , show subkey
+                       , ", kids: "
+                       , show kids
+                       , ", arcDrop: "
+                       , show arcDrop
+                       , ", rest: "
+                       , show rest
+                       ]
+
+      in trace msg $
       let DecodedNode {
             d_arc = fullArc
           , d_subtrieCount = subtrieCount
@@ -160,8 +174,24 @@ trieLookupMany keys (TI buf rootDrop root) =
           , d_readValueN = readValueN
           } = decodeNode buf offset
 
-          arc = BS.drop arcDrop fullArc
+          nodeMsg = concat [ "trieLookupMany decodedNode fullArc: "
+                           , show fullArc
+                           , ", subtrieCount: "
+                           , show subtrieCount
+                           , ", valueCount: "
+                           , show valueCount
+                           ]
+
+
+          arc = trace nodeMsg $ BS.drop arcDrop fullArc
           (_, remainingKey, remainingArc) = breakCommonPrefix subkey arc
+          (_, remainingMultikeys, remainingArc) = breakCommonPrefixMulti multikey arc
+
+          keyMsg = concat [ "trieLookupMany keys remainingKey: "
+                           , show remainingKey
+                           , ", remainingArc: "
+                           , show remainingArc
+                           ]
 
           trySubtries key n cont
             | n < subtrieCount =
@@ -184,13 +214,21 @@ trieLookupMany keys (TI buf rootDrop root) =
                             (goKids restKids)
 
               _ -> goKids restKids
+            case breakCommonPrefixMulti kid remainingArc of
+              (_, [], "") ->
+                readValues 0 (goKids restKids)
+              (_, remainingMultikeys, "") ->
+                trySubtries (kid { _mkChildren = remainingMultikeys })
+                            0
+                            (goKids restKids)
 
           readValues n cont
             | n < valueCount = readValueN n : readValues (n + 1) cont
             | otherwise = cont
 
-      in case (remainingKey, remainingArc) of
+      in case (trace keyMsg remainingKey, remainingArc) of
          ("", "") -> readValues 0 (goKids kids)
+         ("N", _) -> 
          (_, "") -> trySubtries (MultiKey remainingKey kids) 0 rest
          _ -> rest
 
@@ -315,10 +353,33 @@ writeTrieIndex keyFunc vec buf h = do
 
         case () of
           -- keys are identical
+          --   E.G. When processing ABC, ABDA, ABDA
+          --   upon encountering the *second* ABDA we will have:
+          --     ctx: AB
+          --     arc: DA
+          --     key: ABDA
+          --     ctxShared: AB
+          --     ctxLeft: ""
+          --     ctxRight: DA
+          --     arcShared: DA
+          --     arcLeft: ""
+          --     arcRight: ""
+          --
           _ | sameCtx, z arcLeft, z arcRight ->
             writeTrie ctx arc subtries (datOffset:values) (ndx + 1) offset
 
           -- new item is a subtrie of the current arc
+          --   E.G. When processing ABC, ABDA, ABDAX
+          --   upon encountering ABDAX we will have:
+          --     ctx: AB
+          --     arc: DA
+          --     key: ABDAX
+          --     ctxShared: AB
+          --     ctxLeft: ""
+          --     ctxRight: DAX
+          --     arcShared: DA
+          --     arcLeft: ""
+          --     arcRight: X
           _ | sameCtx, z arcLeft -> do
             let subctx = ctx `BS.append` arc
             (sub, newOffset, newNdx) <- writeTrie subctx
@@ -331,6 +392,17 @@ writeTrieIndex keyFunc vec buf h = do
             writeTrie ctx arc (sub:subtries) values newNdx newOffset
 
           -- new item is a separate (non-zero) arc in the same context
+          --   E.G. When processing ABC, ABDA, ABDQ
+          --   upon encountering ABDQ we will have:
+          --     ctx: AB
+          --     arc: DA
+          --     key: ABDQ
+          --     ctxShared: AB
+          --     ctxLeft: ""
+          --     ctxRight: DQ
+          --     arcShared: D
+          --     arcLeft: A
+          --     arcRight: Q
           _ | sameCtx, nz arcShared, nz arcLeft, nz arcRight -> do
             written <- flushTrie arcLeft subtries values
 
@@ -346,6 +418,10 @@ writeTrieIndex keyFunc vec buf h = do
 
             writeTrie ctx arcShared [subR,subL] [] newNdx newOffset
 
+          -- the item examined was not part of our parent trie's context,
+          -- so we can flush the current arc and return without moving
+          -- on to the next index in the array. The current item will be
+          -- reconsidered further up the recursion chain.
           _ -> do
             bytesWritten <- flushTrie arc subtries values
             pure (offset, offset + bytesWritten, ndx)
@@ -357,7 +433,7 @@ writeTrieIndex keyFunc vec buf h = do
     flushTrie :: BS.ByteString
               -> [Int]  -- subtrie offsets
               -> [Int]  -- value offsets
-              -> IO Int -- BytesTritten
+              -> IO Int -- Bytes written
     flushTrie arc subtries values = do
       let arcLength = BS.length arc
 
@@ -387,3 +463,17 @@ breakCommonPrefix b1 b2 =
      , BS.drop prefixLength b1
      , BS.drop prefixLength b2
      )
+
+breakCommonPrefixMulti :: MultiKey
+                       -> BS.ByteString
+                       -> [(BS.ByteString, [MultiKey], BS.ByteString)]
+breakCommonPrefixMulti (MultiKey prefix children) arc =
+  let (commonPre, remKey, remArc) = breakCommonPrefix prefix arc
+  in do
+    (MultiKey childPre childChildren) <- children
+    let (commonPre', remKey', remArc') = breakCommonPrefix childPre remArc
+    if null commonPre'
+       then pure (commonPre, [], remArc)
+       else pure (commonPre <> commonPre', childChildren, remArc')
+
+

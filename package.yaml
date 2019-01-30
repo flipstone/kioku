@@ -53,3 +53,15 @@ executables:
     - -O3
     dependencies:
     - kioku
+tests:
+  kioku-test:
+    main: Driver.hs
+    source-dirs: test
+    ghc-options:
+    - -O3
+    dependencies:
+      - kioku
+      - containers
+      - tasty
+      - tasty-discover
+      - tasty-hunit
