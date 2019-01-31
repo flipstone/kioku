@@ -22,8 +22,6 @@ import            System.IO
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
 
-import Debug.Trace
-
 trieLookup :: BS.ByteString -> TrieIndex -> [Int]
 trieLookup key = maybe [] trieRootElems . lookupSubtrie key
 
@@ -153,46 +151,21 @@ trieLookupMany [] _ = []
 trieLookupMany keys (TI buf rootDrop root) =
     go (mkMultiKey keys) rootDrop root []
   where
-    go multikey@(MultiKey subkey kids) arcDrop offset rest =
-      let msg = concat [ "---------------\n"
-                       , "trieLookupMany go subkey: "
-                       , show subkey
-                       , ", kids: "
-                       , show kids
-                       , ", arcDrop: "
-                       , show arcDrop
-                       , ", rest: "
-                       , show rest
-                       ]
+    go :: MultiKey -> Int -> Int -> [Int] -> [Int]
+    go (MultiKey subkey kids) arcDrop offset rest =
+      let DecodedNode
+            { d_arc = fullArc
+            , d_subtrieCount = subtrieCount
+            , d_readSubtrieN = readSubtrieN
+            , d_valueCount = valueCount
+            , d_readValueN = readValueN
+            } = decodeNode buf offset
 
-      in trace msg $
-      let DecodedNode {
-            d_arc = fullArc
-          , d_subtrieCount = subtrieCount
-          , d_readSubtrieN = readSubtrieN
-          , d_valueCount = valueCount
-          , d_readValueN = readValueN
-          } = decodeNode buf offset
-
-          nodeMsg = concat [ "trieLookupMany decodedNode fullArc: "
-                           , show fullArc
-                           , ", subtrieCount: "
-                           , show subtrieCount
-                           , ", valueCount: "
-                           , show valueCount
-                           ]
-
-
-          arc = trace nodeMsg $ BS.drop arcDrop fullArc
+          arc = BS.drop arcDrop fullArc
           (_, remainingKey, remainingArc) = breakCommonPrefix subkey arc
-          (_, remainingMultikeys, remainingArc) = breakCommonPrefixMulti multikey arc
 
-          keyMsg = concat [ "trieLookupMany keys remainingKey: "
-                           , show remainingKey
-                           , ", remainingArc: "
-                           , show remainingArc
-                           ]
-
+          -- | Gets a list containing the results from recursing into all the subtries of this index with some multikey
+          trySubtries :: MultiKey -> Int -> [Int] -> [Int]
           trySubtries key n cont
             | n < subtrieCount =
               go key
@@ -203,34 +176,38 @@ trieLookupMany keys (TI buf rootDrop root) =
             | otherwise =
               cont
 
+          -- | Gets a list containing the results for all the multikeys in the argument for the remainingArc
+          goKids :: [MultiKey] -> [Int]
           goKids [] = rest
           goKids (kid:restKids) =
             case breakCommonPrefix (mkPrefix kid) remainingArc of
               (_, "", "") ->
-                readValues 0 (goKids restKids)
-              (_, remainingKid, "") ->
+                readValues 0 (goKids restKids) -- get all the values for this index, prepended to the remaining kid's results
+              (_, remainingKid, "") -> -- if there is a remainder for the prefix and the arc was completely consumed, we descend into the subtries
                 trySubtries (kid { mkPrefix = remainingKid })
                             0
                             (goKids restKids)
 
               _ -> goKids restKids
-            case breakCommonPrefixMulti kid remainingArc of
-              (_, [], "") ->
-                readValues 0 (goKids restKids)
-              (_, remainingMultikeys, "") ->
-                trySubtries (kid { _mkChildren = remainingMultikeys })
-                            0
-                            (goKids restKids)
 
+          -- | Reads out all the values from the index and prepend them to a list of other values
+          readValues :: Int -> [Int] -> [Int]
           readValues n cont
             | n < valueCount = readValueN n : readValues (n + 1) cont
             | otherwise = cont
 
-      in case (trace keyMsg remainingKey, remainingArc) of
-         ("", "") -> readValues 0 (goKids kids)
-         ("N", _) -> 
-         (_, "") -> trySubtries (MultiKey remainingKey kids) 0 rest
-         _ -> rest
+      in case (remainingKey, remainingArc) of
+           -- if both the subkey and the arc were consumed, we will branch on the children of the MultiKey
+           ("", "") -> readValues 0 (goKids kids)
+           -- if the key was consumed but there was some remaining arc, we try prepending the subkey to prefix
+           -- of each child in the MultiKey and performing a search with each of those.
+           ("", _) ->
+             let kids' = map (\(MultiKey prefix children) -> MultiKey (subkey <> prefix) children) kids
+              in foldl' (\r k -> go k arcDrop offset r) rest kids'
+           -- if the arc was completely consumed by this subkey, we should descend into the subtries of this node
+           (_, "") -> trySubtries (MultiKey remainingKey kids) 0 rest
+           -- if we have remainders from both the key and the arc then theres no possibility of finding a match in this branch.
+           _ -> rest
 
 trieElems :: TrieIndex -> [Int]
 trieElems (TI buf _ rootOffset) =
@@ -463,17 +440,4 @@ breakCommonPrefix b1 b2 =
      , BS.drop prefixLength b1
      , BS.drop prefixLength b2
      )
-
-breakCommonPrefixMulti :: MultiKey
-                       -> BS.ByteString
-                       -> [(BS.ByteString, [MultiKey], BS.ByteString)]
-breakCommonPrefixMulti (MultiKey prefix children) arc =
-  let (commonPre, remKey, remArc) = breakCommonPrefix prefix arc
-  in do
-    (MultiKey childPre childChildren) <- children
-    let (commonPre', remKey', remArc') = breakCommonPrefix childPre remArc
-    if null commonPre'
-       then pure (commonPre, [], remArc)
-       else pure (commonPre <> commonPre', childChildren, remArc')
-
 
