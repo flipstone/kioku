@@ -22,6 +22,9 @@ import            System.IO
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
 
+
+import Debug.Trace
+
 trieLookup :: BS.ByteString -> TrieIndex -> [Int]
 trieLookup key = maybe [] trieRootElems . lookupSubtrie key
 
@@ -83,10 +86,11 @@ lookupSubtrie key (TI buf rootDrop root) =
          (_, "") -> trySubtries subtries
          _ -> Nothing
 
-data MultiKey = MultiKey {
-    mkPrefix :: !BS.ByteString
-  , _mkChildren :: ![MultiKey]
-  } deriving (Eq)
+data MultiKey = MultiKey !BS.ByteString ![MultiKey] deriving Eq
+ -- { mkPrefix :: !BS.ByteString
+ -- , _mkChildren :: ![MultiKey]
+ -- --, isEndpoint :: !Bool
+ -- } deriving (Eq)
 
 instance Show MultiKey where
   show mk =
@@ -97,31 +101,32 @@ instance Show MultiKey where
         ++ concatMap (go (' ':' ':indent)) kids
 
 mkInsert :: MultiKey -> BS.ByteString -> MultiKey
-mkInsert (MultiKey "" []) key = MultiKey key []
-mkInsert (MultiKey parent kids) key =
+mkInsert (MultiKey "" [] {-_-}) key = MultiKey key [] --True
+mkInsert (MultiKey parent kids {-isEnd-}) key =
   case breakCommonPrefix parent key of
-  (_, "", new) ->
-    case kids of
-    (first:rest) ->
-      case mkInsert first new of
-      (MultiKey "" newKids) -> MultiKey parent (newKids ++ rest)
-      newKid -> MultiKey parent (newKid : rest)
+    (_, "", "") -> MultiKey parent kids --True
+    (_, "", new) ->
+      case kids of
+        (first:rest) ->
+          case mkInsert first new of
+            (MultiKey "" newKids {-_-}) -> MultiKey parent (newKids ++ rest) --isEnd
+            newKid -> MultiKey parent (newKid : rest) --isEnd
 
-    _ -> MultiKey parent (MultiKey new [] : kids)
+        _ -> MultiKey parent (MultiKey new [] {-True-} : kids) --isEnd
 
-  (newParent, old, "") ->
-    MultiKey newParent [MultiKey old kids]
+    (newParent, old, "") ->
+      MultiKey newParent [MultiKey old kids {-True-}] --isEnd
 
-  (newParent, old, new) ->
-    let oldKey = MultiKey old kids
-        newKey = MultiKey new []
-    in MultiKey newParent [newKey, oldKey]
+    (newParent, old, new) ->
+      let oldKey = MultiKey old kids --isEnd
+          newKey = MultiKey new [] --True
+       in MultiKey newParent [newKey, oldKey] --False
 
 mkMultiKey :: [BS.ByteString] -> MultiKey
 mkMultiKey [] = error "Can't build MultiKey with no keys!"
 mkMultiKey keys =
   let (first:rest) = nub (sortBy (flip compare) keys)
-  in foldl' mkInsert (MultiKey first []) rest
+   in foldl' mkInsert (MultiKey first [] {-True-}) rest
 
 data DecodedNode = DecodedNode {
     d_arc :: BS.ByteString
@@ -152,7 +157,7 @@ trieLookupMany keys (TI buf rootDrop root) =
     go (mkMultiKey keys) rootDrop root []
   where
     go :: MultiKey -> Int -> Int -> [Int] -> [Int]
-    go (MultiKey subkey kids) arcDrop offset rest =
+    go multiKey arcDrop offset rest =
       let DecodedNode
             { d_arc = fullArc
             , d_subtrieCount = subtrieCount
@@ -162,7 +167,7 @@ trieLookupMany keys (TI buf rootDrop root) =
             } = decodeNode buf offset
 
           arc = BS.drop arcDrop fullArc
-          (_, remainingKey, remainingArc) = breakCommonPrefix subkey arc
+          (_, remainingMultiKey, remainingArc) = breakCommonPrefixMultiKey multiKey arc
 
           -- | Gets a list containing the results from recursing into all the subtries of this index with some multikey
           trySubtries :: MultiKey -> Int -> [Int] -> [Int]
@@ -180,11 +185,11 @@ trieLookupMany keys (TI buf rootDrop root) =
           goKids :: [MultiKey] -> [Int]
           goKids [] = rest
           goKids (kid:restKids) =
-            case breakCommonPrefix (mkPrefix kid) remainingArc of
-              (_, "", "") ->
+            trace "goKids" $ case breakCommonPrefixMultiKey kid remainingArc of
+              (_, MultiKey "" _, "") ->
                 readValues 0 (goKids restKids) -- get all the values for this index, prepended to the remaining kid's results
-              (_, remainingKid, "") -> -- if there is a remainder for the prefix and the arc was completely consumed, we descend into the subtries
-                trySubtries (kid { mkPrefix = remainingKid })
+              (_, k, "") -> -- if there is a remainder for the prefix and the arc was completely consumed, we descend into the subtries
+                trySubtries k
                             0
                             (goKids restKids)
 
@@ -196,16 +201,11 @@ trieLookupMany keys (TI buf rootDrop root) =
             | n < valueCount = readValueN n : readValues (n + 1) cont
             | otherwise = cont
 
-      in case (remainingKey, remainingArc) of
+      in trace (show (arc, rest)) $ case (remainingMultiKey, remainingArc) of
            -- if both the subkey and the arc were consumed, we will branch on the children of the MultiKey
-           ("", "") -> readValues 0 (goKids kids)
-           -- if the key was consumed but there was some remaining arc, we try prepending the subkey to prefix
-           -- of each child in the MultiKey and performing a search with each of those.
-           ("", _) ->
-             let kids' = map (\(MultiKey prefix children) -> MultiKey (subkey <> prefix) children) kids
-              in foldl' (\r k -> go k arcDrop offset r) rest kids'
+           (MultiKey "" ks, "") -> readValues 0 (goKids ks)
            -- if the arc was completely consumed by this subkey, we should descend into the subtries of this node
-           (_, "") -> trySubtries (MultiKey remainingKey kids) 0 rest
+           (k, "") -> trySubtries k 0 rest
            -- if we have remainders from both the key and the arc then theres no possibility of finding a match in this branch.
            _ -> rest
 
@@ -440,4 +440,21 @@ breakCommonPrefix b1 b2 =
      , BS.drop prefixLength b1
      , BS.drop prefixLength b2
      )
+
+breakCommonPrefixMultiKey :: MultiKey
+                          -> BS.ByteString
+                          -> (BS.ByteString, MultiKey, BS.ByteString)
+breakCommonPrefixMultiKey (MultiKey prefix kids) arc =
+  case breakCommonPrefix prefix arc of
+    (common, "", "") -> (common, MultiKey "" kids, "")
+    (common, remPrefix, "") -> (common, MultiKey remPrefix kids, "")
+    (common, "", remArc) ->
+      case dropWhile commonIsEmpty $ map (\k -> breakCommonPrefixMultiKey k remArc) kids of
+        ((common', key, remArc'):_) -> (common <> common', key, remArc')
+        _     -> (common, MultiKey "" [], remArc)
+    (common, remPrefix, remArc) -> (common, MultiKey remPrefix kids, remArc)
+  where
+    commonIsEmpty ("", _, _) = True
+    commonIsEmpty _          = False
+
 
