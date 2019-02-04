@@ -22,9 +22,6 @@ import            System.IO
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
 
-
-import Debug.Trace
-
 trieLookup :: BS.ByteString -> TrieIndex -> [Int]
 trieLookup key = maybe [] trieRootElems . lookupSubtrie key
 
@@ -87,10 +84,6 @@ lookupSubtrie key (TI buf rootDrop root) =
          _ -> Nothing
 
 data MultiKey = MultiKey !BS.ByteString ![MultiKey] deriving Eq
- -- { mkPrefix :: !BS.ByteString
- -- , _mkChildren :: ![MultiKey]
- -- --, isEndpoint :: !Bool
- -- } deriving (Eq)
 
 instance Show MultiKey where
   show mk =
@@ -101,32 +94,32 @@ instance Show MultiKey where
         ++ concatMap (go (' ':' ':indent)) kids
 
 mkInsert :: MultiKey -> BS.ByteString -> MultiKey
-mkInsert (MultiKey "" [] {-_-}) key = MultiKey key [] --True
-mkInsert (MultiKey parent kids {-isEnd-}) key =
+mkInsert (MultiKey "" []) key = MultiKey key []
+mkInsert (MultiKey parent kids) key =
   case breakCommonPrefix parent key of
-    (_, "", "") -> MultiKey parent kids --True
+    (_, "", "") -> MultiKey parent kids
     (_, "", new) ->
       case kids of
         (first:rest) ->
           case mkInsert first new of
-            (MultiKey "" newKids {-_-}) -> MultiKey parent (newKids ++ rest) --isEnd
-            newKid -> MultiKey parent (newKid : rest) --isEnd
+            (MultiKey "" newKids) -> MultiKey parent (newKids ++ rest)
+            newKid -> MultiKey parent (newKid : rest)
 
-        _ -> MultiKey parent (MultiKey new [] {-True-} : kids) --isEnd
+        _ -> MultiKey parent (MultiKey new [] : kids)
 
     (newParent, old, "") ->
-      MultiKey newParent [MultiKey old kids {-True-}] --isEnd
+      MultiKey newParent [MultiKey old kids]
 
     (newParent, old, new) ->
-      let oldKey = MultiKey old kids --isEnd
-          newKey = MultiKey new [] --True
-       in MultiKey newParent [newKey, oldKey] --False
+      let oldKey = MultiKey old kids
+          newKey = MultiKey new []
+       in MultiKey newParent [newKey, oldKey]
 
 mkMultiKey :: [BS.ByteString] -> MultiKey
 mkMultiKey [] = error "Can't build MultiKey with no keys!"
 mkMultiKey keys =
   let (first:rest) = nub (sortBy (flip compare) keys)
-   in foldl' mkInsert (MultiKey first [] {-True-}) rest
+   in foldl' mkInsert (MultiKey first []) rest
 
 data DecodedNode = DecodedNode {
     d_arc :: BS.ByteString
@@ -185,7 +178,7 @@ trieLookupMany keys (TI buf rootDrop root) =
           goKids :: [MultiKey] -> [Int]
           goKids [] = rest
           goKids (kid:restKids) =
-            trace "goKids" $ case breakCommonPrefixMultiKey kid remainingArc of
+            case breakCommonPrefixMultiKey kid remainingArc of
               (_, MultiKey "" _, "") ->
                 readValues 0 (goKids restKids) -- get all the values for this index, prepended to the remaining kid's results
               (_, k, "") -> -- if there is a remainder for the prefix and the arc was completely consumed, we descend into the subtries
@@ -201,7 +194,7 @@ trieLookupMany keys (TI buf rootDrop root) =
             | n < valueCount = readValueN n : readValues (n + 1) cont
             | otherwise = cont
 
-      in trace (show (arc, rest)) $ case (remainingMultiKey, remainingArc) of
+      in case (remainingMultiKey, remainingArc) of
            -- if both the subkey and the arc were consumed, we will branch on the children of the MultiKey
            (MultiKey "" ks, "") -> readValues 0 (goKids ks)
            -- if the arc was completely consumed by this subkey, we should descend into the subtries of this node
@@ -456,5 +449,3 @@ breakCommonPrefixMultiKey (MultiKey prefix kids) arc =
   where
     commonIsEmpty ("", _, _) = True
     commonIsEmpty _          = False
-
-
