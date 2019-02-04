@@ -14,6 +14,7 @@ import qualified  Data.ByteString.Char8 as CBS
 import            Data.Foldable
 import            Data.Function
 import            Data.List
+import            Data.Monoid ((<>))
 import qualified  Data.Proxy as P
 import qualified  Data.Vector.Unboxed.Mutable as V
 import qualified  Data.Vector.Algorithms.AmericanFlag as S
