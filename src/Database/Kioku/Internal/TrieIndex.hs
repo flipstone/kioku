@@ -84,7 +84,8 @@ lookupSubtrie key (TI buf rootDrop root) =
          (_, "") -> trySubtries subtries
          _ -> Nothing
 
-data MultiKey = MultiKey !BS.ByteString ![MultiKey] deriving Eq
+data MultiKey = MultiKey !BS.ByteString ![MultiKey]
+  deriving Eq
 
 instance Show MultiKey where
   show mk =
@@ -175,20 +176,6 @@ trieLookupMany keys (TI buf rootDrop root) =
             | otherwise =
               cont
 
-          -- | Gets a list containing the results for all the multikeys in the argument for the remainingArc
-          goKids :: [MultiKey] -> [Int]
-          goKids [] = rest
-          goKids (kid:restKids) =
-            case breakCommonPrefixMultiKey kid remainingArc of
-              (_, MultiKey "" _, "") ->
-                readValues 0 (goKids restKids) -- get all the values for this index, prepended to the remaining kid's results
-              (_, k, "") -> -- if there is a remainder for the prefix and the arc was completely consumed, we descend into the subtries
-                trySubtries k
-                            0
-                            (goKids restKids)
-
-              _ -> goKids restKids
-
           -- | Reads out all the values from the index and prepend them to a list of other values
           readValues :: Int -> [Int] -> [Int]
           readValues n cont
@@ -196,11 +183,25 @@ trieLookupMany keys (TI buf rootDrop root) =
             | otherwise = cont
 
       in case (remainingMultiKey, remainingArc) of
-           -- if both the subkey and the arc were consumed, we will branch on the children of the MultiKey
-           (MultiKey "" ks, "") -> readValues 0 (goKids ks)
-           -- if the arc was completely consumed by this subkey, we should descend into the subtries of this node
+           -- if both the MultiKey prefix and the arc were consumed, we need to
+           -- read the values at the current node, and may need to continue
+           -- searching below the node if there are are any query values that
+           -- this node was a prefix of
+           (k@(MultiKey "" kids), "") ->
+             readValues 0 $
+               -- before we descend to scan subTries, we might as well check
+               -- that there are actually any kids to scan remaining in the
+               -- MultiKey
+               case kids of
+                 [] -> rest
+                 _ -> trySubtries k 0 rest
+
+           -- if the arc was completely consumed by this subkey, we should
+           -- descend into the subtries of this node
            (k, "") -> trySubtries k 0 rest
-           -- if we have remainders from both the key and the arc then theres no possibility of finding a match in this branch.
+
+           -- if we have remainders from both the key and the arc then theres
+           -- no possibility of finding a match in this branch.
            _ -> rest
 
 trieElems :: TrieIndex -> [Int]
@@ -440,13 +441,19 @@ breakCommonPrefixMultiKey :: MultiKey
                           -> (BS.ByteString, MultiKey, BS.ByteString)
 breakCommonPrefixMultiKey (MultiKey prefix kids) arc =
   case breakCommonPrefix prefix arc of
-    (common, "", "") -> (common, MultiKey "" kids, "")
-    (common, remPrefix, "") -> (common, MultiKey remPrefix kids, "")
-    (common, "", remArc) ->
-      case dropWhile commonIsEmpty $ map (\k -> breakCommonPrefixMultiKey k remArc) kids of
-        ((common', key, remArc'):_) -> (common <> common', key, remArc')
-        _     -> (common, MultiKey "" [], remArc)
-    (common, remPrefix, remArc) -> (common, MultiKey remPrefix kids, remArc)
-  where
-    commonIsEmpty ("", _, _) = True
-    commonIsEmpty _          = False
+    -- The entire MultiKey prefix was a prefix of the arc, AND there was some
+    -- arc remaining, so we need descend to kids of the MultiKey and continue
+    -- breaking
+    (common, "", remArc) | not (BS.null remArc) ->
+      let commonIsEmpty ("", _, _) = True
+          commonIsEmpty _          = False
+       in case dropWhile commonIsEmpty $ map (\k -> breakCommonPrefixMultiKey k remArc) kids of
+            ((common', key, remArc'):_) -> (common <> common', key, remArc')
+            _     -> (common, MultiKey "" [], remArc)
+
+    -- If there is any remaining prefix from the original MultiKey *OR* there
+    -- was any remaining arc that didn't match with the original Prefix, then
+    -- we definitely don't need to descend into the kids. We can just return
+    -- a new MultiKey with the remaining prefix
+    (common, remPrefix, remArc) ->
+      (common, MultiKey remPrefix kids, remArc)
