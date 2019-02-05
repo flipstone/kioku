@@ -22,8 +22,8 @@ testDataKey (TestData bytes) = bytes
 test_queries :: TestTree
 test_queries =
   testGroup
-    "Queries"
-    [ testCase "keyExactIn can find a single result" $
+    "keyExactIn query"
+    [ testCase "finds a single result" $
         runQueryTest $
           QueryTest
             { queryTestData     = [ TestData "USNYC", TestData "USATL", TestData "USNY" ]
@@ -31,20 +31,44 @@ test_queries =
             , queryTestExpected = [ TestData "USATL" ]
             }
 
-    , testCase "keyExactIn can find multiple results" $
+    , testCase "finds multiple results" $
         runQueryTest $
           QueryTest
             { queryTestData     = [ TestData "USNYC", TestData "USATL", TestData "USNY" ]
-            , queryTestQuery    = keyExactIn [ testDataKey $ TestData "USATL" ]
-            , queryTestExpected = [ TestData "USATL" ]
+            , queryTestQuery    = keyExactIn $ testDataKey <$> [ TestData "USATL", TestData "USNY" ]
+            , queryTestExpected = [ TestData "USATL", TestData "USNY" ]
             }
 
-    , testCase "keyExactIn finds keys when TrieIndex breaks differently than query input" $
+    , testCase "finds keys when the MultiKey contains a node that is a prefix of it, but the Trie does not" $
         runQueryTest $
           QueryTest
-            { queryTestData     = [ TestData "USNYC", TestData "USATL", TestData "USNY" ]
+            { queryTestData     = [ TestData "USNYC", TestData "USATL" ]
             , queryTestQuery    = keyExactIn $ testDataKey <$> [ TestData "USNYC", TestData "USNY" ]
-            , queryTestExpected = [ TestData "USNYC", TestData "USNY" ]
+            , queryTestExpected = [ TestData "USNYC" ]
+            }
+
+    , testCase "finds a key when the Trie contains a node that is prefix of it" $
+        runQueryTest $
+          QueryTest
+            { queryTestData     = [ TestData "USNYC", TestData "USATL", TestData "USN" ]
+            , queryTestQuery    = keyExactIn $ testDataKey <$> [ TestData "USNYC" ]
+            , queryTestExpected = [ TestData "USNYC" ]
+            }
+
+    , testCase "does not find a key that is a prefix of the keys being queried, but was not itself queried" $
+        runQueryTest $
+          QueryTest
+            { queryTestData     = [ TestData "USNY", TestData "USATL", TestData "USN" ]
+            , queryTestQuery    = keyExactIn $ testDataKey <$> [ TestData "USNY", TestData "USNT" ]
+            , queryTestExpected = [ TestData "USNY" ]
+            }
+
+    , testCase "finds a key that is a prefix of other keys being queried when that key is also queried itself" $
+        runQueryTest $
+          QueryTest
+            { queryTestData     = [ TestData "USNY", TestData "USATL", TestData "USN" ]
+            , queryTestQuery    = keyExactIn $ testDataKey <$> [ TestData "USNY", TestData "USN" ]
+            , queryTestExpected = [ TestData "USNY", TestData "USN" ]
             }
     ]
 

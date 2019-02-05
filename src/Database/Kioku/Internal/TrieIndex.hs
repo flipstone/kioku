@@ -84,44 +84,48 @@ lookupSubtrie key (TI buf rootDrop root) =
          (_, "") -> trySubtries subtries
          _ -> Nothing
 
-data MultiKey = MultiKey !BS.ByteString ![MultiKey]
-  deriving Eq
+data MultiKey =
+  MultiKey
+    { _mkPrefix :: !BS.ByteString
+    , _mkChildren :: ![MultiKey]
+    , _isEndpoint :: !Bool
+    } deriving (Eq)
 
 instance Show MultiKey where
   show mk =
       "MultiKey\n" ++ go "  " mk
     where
-      go indent (MultiKey pre kids) =
+      go indent (MultiKey pre kids _) =
            indent ++ CBS.unpack pre ++ "\n"
         ++ concatMap (go (' ':' ':indent)) kids
 
 mkInsert :: MultiKey -> BS.ByteString -> MultiKey
-mkInsert (MultiKey "" []) key = MultiKey key []
-mkInsert (MultiKey parent kids) key =
+mkInsert (MultiKey "" [] _) key = MultiKey key [] True
+mkInsert (MultiKey parent kids isEnd) key =
   case breakCommonPrefix parent key of
-    (_, "", "") -> MultiKey parent kids
+    (_, "", "") -> MultiKey parent kids True
     (_, "", new) ->
       case kids of
         (first:rest) ->
           case mkInsert first new of
-            (MultiKey "" newKids) -> MultiKey parent (newKids ++ rest)
-            newKid -> MultiKey parent (newKid : rest)
+            (MultiKey "" newKids _) -> MultiKey parent (newKids ++ rest) isEnd
+            newKid -> MultiKey parent (newKid : rest) isEnd
 
-        _ -> MultiKey parent (MultiKey new [] : kids)
+        _ -> MultiKey parent (MultiKey new [] True : kids) isEnd
 
     (newParent, old, "") ->
-      MultiKey newParent [MultiKey old kids]
+      MultiKey newParent [MultiKey old kids True] isEnd
 
     (newParent, old, new) ->
-      let oldKey = MultiKey old kids
-          newKey = MultiKey new []
-       in MultiKey newParent [newKey, oldKey]
+      let oldKey = MultiKey old kids isEnd
+          newKey = MultiKey new [] True
+       in MultiKey newParent [newKey, oldKey] False
 
 mkMultiKey :: [BS.ByteString] -> MultiKey
 mkMultiKey [] = error "Can't build MultiKey with no keys!"
 mkMultiKey keys =
   let (first:rest) = nub (sortBy (flip compare) keys)
-   in foldl' mkInsert (MultiKey first []) rest
+   in foldl' mkInsert (MultiKey first [] True) rest
 
 data DecodedNode = DecodedNode {
     d_arc :: BS.ByteString
@@ -187,14 +191,15 @@ trieLookupMany keys (TI buf rootDrop root) =
            -- read the values at the current node, and may need to continue
            -- searching below the node if there are are any query values that
            -- this node was a prefix of
-           (k@(MultiKey "" kids), "") ->
-             readValues 0 $
-               -- before we descend to scan subTries, we might as well check
-               -- that there are actually any kids to scan remaining in the
-               -- MultiKey
-               case kids of
-                 [] -> rest
-                 _ -> trySubtries k 0 rest
+           (k@(MultiKey "" kids isEnd), "")
+             | isEnd ->
+               readValues 0 $
+                 -- before we descend to scan subTries, we might as well check
+                 -- that there are actually any kids to scan remaining in the
+                 -- MultiKey
+                 case kids of
+                   [] -> rest
+                   _ -> trySubtries k 0 rest
 
            -- if the arc was completely consumed by this subkey, we should
            -- descend into the subtries of this node
@@ -439,21 +444,23 @@ breakCommonPrefix b1 b2 =
 breakCommonPrefixMultiKey :: MultiKey
                           -> BS.ByteString
                           -> (BS.ByteString, MultiKey, BS.ByteString)
-breakCommonPrefixMultiKey (MultiKey prefix kids) arc =
+breakCommonPrefixMultiKey (MultiKey prefix kids isEnd) arc =
   case breakCommonPrefix prefix arc of
     -- The entire MultiKey prefix was a prefix of the arc, AND there was some
     -- arc remaining, so we need descend to kids of the MultiKey and continue
     -- breaking
+    -- Is there a better way to scan through the children multikeys than dropWhile?
+    -- By nature of the MultiKey data structure, only one child can possibly match
     (common, "", remArc) | not (BS.null remArc) ->
       let commonIsEmpty ("", _, _) = True
           commonIsEmpty _          = False
        in case dropWhile commonIsEmpty $ map (\k -> breakCommonPrefixMultiKey k remArc) kids of
             ((common', key, remArc'):_) -> (common <> common', key, remArc')
-            _     -> (common, MultiKey "" [], remArc)
+            _                           -> (common, MultiKey "" [] False, remArc)
 
     -- If there is any remaining prefix from the original MultiKey *OR* there
     -- was any remaining arc that didn't match with the original Prefix, then
     -- we definitely don't need to descend into the kids. We can just return
     -- a new MultiKey with the remaining prefix
     (common, remPrefix, remArc) ->
-      (common, MultiKey remPrefix kids, remArc)
+      (common, MultiKey remPrefix kids isEnd, remArc)
