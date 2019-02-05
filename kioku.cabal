@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 25653826bf9709a384a4b01731df6f60097c2d7275fad947616bccc1be910318
+-- hash: c3863b5222d4eb6f9e59f12428d88b8ef3ecb1f243b9a0e160260a5d1249604b
 
 name:           kioku
 version:        0.1.2.1
@@ -93,6 +93,7 @@ test-suite kioku-test
       base >=4.8 && <4.13
     , bytestring
     , containers
+    , deepseq
     , kioku
     , tasty
     , tasty-discover
