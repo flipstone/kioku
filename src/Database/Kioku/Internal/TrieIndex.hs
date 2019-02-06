@@ -23,6 +23,7 @@ import            System.IO
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
 
+
 trieLookup :: BS.ByteString -> TrieIndex -> [Int]
 trieLookup key = maybe [] trieRootElems . lookupSubtrie key
 
@@ -93,10 +94,10 @@ data MultiKey =
 
 instance Show MultiKey where
   show mk =
-      "MultiKey\n" ++ go "  " mk
+      "\nMultiKey\n" ++ go "  " mk
     where
-      go indent (MultiKey pre kids _) =
-           indent ++ CBS.unpack pre ++ "\n"
+      go indent (MultiKey pre kids isEnd) =
+        indent ++ '|' : CBS.unpack pre ++ '|' :  " num kids:" ++ show (length kids) ++ (if isEnd then "(end)\n" else "\n")
         ++ concatMap (go (' ':' ':indent)) kids
 
 mkInsert :: MultiKey -> BS.ByteString -> MultiKey
@@ -114,7 +115,7 @@ mkInsert (MultiKey parent kids isEnd) key =
         _ -> MultiKey parent (MultiKey new [] True : kids) isEnd
 
     (newParent, old, "") ->
-      MultiKey newParent [MultiKey old kids True] isEnd
+      MultiKey newParent [MultiKey old kids isEnd] True
 
     (newParent, old, new) ->
       let oldKey = MultiKey old kids isEnd

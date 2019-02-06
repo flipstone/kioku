@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c3863b5222d4eb6f9e59f12428d88b8ef3ecb1f243b9a0e160260a5d1249604b
+-- hash: 8467feab6f107122a933ea46bd087b078874c22a75a05d581609935b403a7d8c
 
 name:           kioku
 version:        0.1.2.1
@@ -94,9 +94,11 @@ test-suite kioku-test
     , bytestring
     , containers
     , deepseq
+    , hedgehog
     , kioku
     , tasty
     , tasty-discover
+    , tasty-hedgehog
     , tasty-hunit
     , zlib
   default-language: Haskell2010

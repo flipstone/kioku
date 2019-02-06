@@ -1,16 +1,22 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module QueryTest where
 
 import            Control.Monad (void, when)
-import            Control.DeepSeq (deepseq)
+import            Control.Monad.IO.Class (liftIO)
+import            Control.DeepSeq (NFData, deepseq)
 import qualified  Data.ByteString.Char8 as BS
 import qualified  Data.Set as Set
 import            Test.Tasty (TestTree, testGroup)
 import            Test.Tasty.HUnit (Assertion, HasCallStack, testCase, assertFailure)
+import qualified  Hedgehog as HH
+import qualified  Hedgehog.Gen as Gen
+import qualified  Hedgehog.Range as Range
+import            Test.Tasty.Hedgehog (testProperty)
 
 import            Database.Kioku
 
 newtype TestData = TestData BS.ByteString
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, NFData)
 
 instance Memorizable TestData where
   memorize (TestData bytes) = bytes
@@ -19,11 +25,28 @@ instance Memorizable TestData where
 testDataKey :: TestData -> BS.ByteString
 testDataKey (TestData bytes) = bytes
 
+copyTestData :: TestData -> TestData
+copyTestData (TestData bytes) = TestData (BS.copy bytes)
+
 test_queries :: TestTree
 test_queries =
   testGroup
     "keyExactIn query"
-    [ testCase "finds a single result" $
+    [ testProperty "works for random cases" $ HH.property $ do
+        dataset <- HH.forAll datasetGen
+        query' <- HH.forAll (queryGen dataset)
+
+        results <- liftIO . withKiokuDB defaultKiokuPath $ \db -> do
+          void $ createDataSet "kioku_tests" dataset db
+          createIndex "kioku_tests" "kioku_tests.index" testDataKey db
+          mmappedResults <- query "kioku_tests.index" (keyExactIn $ map testDataKey query') db
+
+          let copiedResults = copyTestData <$> mmappedResults
+          deepseq copiedResults (pure copiedResults)
+
+        Set.fromList query' HH.=== Set.fromList results
+
+    , testCase "finds a single result" $
         runQueryTest $
           QueryTest
             { queryTestData     = [ TestData "USNYC", TestData "USATL", TestData "USNY" ]
@@ -103,4 +126,14 @@ assertSameData expectedData actualData =
         -- not copy bytes whenever necessary). deepseq here forces the message to
         -- be evaluated before assertFailure is called.
         deepseq msg (assertFailure msg)
+
+datasetGen :: HH.Gen [TestData]
+datasetGen = Gen.list (Range.linear 100 200) testDataGen
+
+testDataGen :: HH.Gen TestData
+testDataGen = TestData <$> Gen.utf8 (Range.linear 1 10) (Gen.element "ABCD")
+
+queryGen :: [TestData] -> HH.Gen [TestData]
+queryGen dataSet =
+  Gen.list (Range.linear 50 100) (Gen.element dataSet)
 
