@@ -44,7 +44,9 @@ test_queries =
           let copiedResults = copyTestData <$> mmappedResults
           deepseq copiedResults (pure copiedResults)
 
-        Set.fromList query' HH.=== Set.fromList results
+        let expected = Set.intersection (Set.fromList dataset) (Set.fromList query')
+
+        expected HH.=== Set.fromList results
 
     , testCase "finds a single result" $
         runQueryTest $
@@ -128,12 +130,15 @@ assertSameData expectedData actualData =
         deepseq msg (assertFailure msg)
 
 datasetGen :: HH.Gen [TestData]
-datasetGen = Gen.list (Range.linear 100 200) testDataGen
+datasetGen = Gen.list (Range.linear 100 200) (testDataGen "ABCD")
 
-testDataGen :: HH.Gen TestData
-testDataGen = TestData <$> Gen.utf8 (Range.linear 1 10) (Gen.element "ABCD")
+testDataGen :: String -> HH.Gen TestData
+testDataGen seedChars = TestData <$> Gen.utf8 (Range.linear 1 20) (Gen.element seedChars)
 
 queryGen :: [TestData] -> HH.Gen [TestData]
-queryGen dataSet =
-  Gen.list (Range.linear 50 100) (Gen.element dataSet)
+queryGen dataSet = do
+  contained <- Gen.list (Range.linear 50 100) (Gen.element dataSet)
+  noise <- Gen.list (Range.linear 10 30) (testDataGen "AEFG")
+  pure $ contained ++ noise
+
 
