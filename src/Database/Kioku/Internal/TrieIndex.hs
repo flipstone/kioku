@@ -92,6 +92,11 @@ data MultiKey =
     , _isEndpoint :: !Bool
     } deriving (Eq)
 
+-- Example MultiKey trace:
+-- MultiKey
+--   |US| num kids:2
+--     |ATL| num kids:0(end)
+--     |NY| num kids:0(end)
 instance Show MultiKey where
   show mk =
       "\nMultiKey\n" ++ go "  " mk
@@ -102,25 +107,25 @@ instance Show MultiKey where
 
 mkInsert :: MultiKey -> BS.ByteString -> MultiKey
 mkInsert (MultiKey "" [] _) key = MultiKey key [] True
-mkInsert (MultiKey parent kids isEnd) key =
-  case breakCommonPrefix parent key of
-    (_, "", "") -> MultiKey parent kids True
-    (_, "", new) ->
+mkInsert (MultiKey prefix kids isEnd) key =
+  case breakCommonPrefix prefix key of
+    (_, "", "") -> MultiKey prefix kids True
+    (_, "", remainingKey) ->
       case kids of
         (first:rest) ->
-          case mkInsert first new of
-            (MultiKey "" newKids _) -> MultiKey parent (newKids ++ rest) isEnd
-            newKid -> MultiKey parent (newKid : rest) isEnd
+          case mkInsert first remainingKey of
+            (MultiKey "" newKids _) -> MultiKey prefix (newKids ++ rest) isEnd
+            newKid -> MultiKey prefix (newKid : rest) isEnd
 
-        _ -> MultiKey parent (MultiKey new [] True : kids) isEnd
+        _ -> MultiKey prefix (MultiKey remainingKey [] True : kids) isEnd
 
-    (newParent, old, "") ->
-      MultiKey newParent [MultiKey old kids isEnd] True
+    (newPrefix, remainingPrefix, "") ->
+      MultiKey newPrefix [MultiKey remainingPrefix kids isEnd] True
 
-    (newParent, old, new) ->
-      let oldKey = MultiKey old kids isEnd
-          newKey = MultiKey new [] True
-       in MultiKey newParent [newKey, oldKey] False
+    (newPrefix, remainingPrefix, remainingKey) ->
+      let oldMultiKey = MultiKey remainingPrefix kids isEnd
+          newMultiKey = MultiKey remainingKey [] True
+       in MultiKey newPrefix [newMultiKey, oldMultiKey] False
 
 mkMultiKey :: [BS.ByteString] -> MultiKey
 mkMultiKey [] = error "Can't build MultiKey with no keys!"
@@ -432,6 +437,12 @@ writeTrieIndex keyFunc vec buf h = do
 
       pure $ byteCount
 
+-- Returns a triple where the first element is the prefix string
+-- that both inputs have in common, the second element is the
+-- remaining portion of the first input that didn't match, and
+-- the third is the remaining portion of the key that
+-- didn't match.
+-- ( common prefix, remaining arc, remaining key)
 breakCommonPrefix :: BS.ByteString
                   -> BS.ByteString
                   -> (BS.ByteString, BS.ByteString, BS.ByteString)
