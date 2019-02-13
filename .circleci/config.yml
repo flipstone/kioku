@@ -12,8 +12,7 @@ jobs:
             - kioku-{{ arch }}-{{ .Branch }}
             - kioku
 
-      - run:
-          command: stack build
+      - run: stack test
 
       - save_cache:
           key: kioku-{{ arch }}-{{ .Branch }}-{{ epoch }}

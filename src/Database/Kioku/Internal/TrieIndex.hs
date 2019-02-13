@@ -14,6 +14,7 @@ import qualified  Data.ByteString.Char8 as CBS
 import            Data.Foldable
 import            Data.Function
 import            Data.List
+import            Data.Monoid ((<>))
 import qualified  Data.Proxy as P
 import qualified  Data.Vector.Unboxed.Mutable as V
 import qualified  Data.Vector.Algorithms.AmericanFlag as S
@@ -21,6 +22,7 @@ import            System.IO
 
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
+
 
 trieLookup :: BS.ByteString -> TrieIndex -> [Int]
 trieLookup key = maybe [] trieRootElems . lookupSubtrie key
@@ -83,45 +85,53 @@ lookupSubtrie key (TI buf rootDrop root) =
          (_, "") -> trySubtries subtries
          _ -> Nothing
 
-data MultiKey = MultiKey {
-    mkPrefix :: !BS.ByteString
-  , _mkChildren :: ![MultiKey]
-  } deriving (Eq)
+data MultiKey =
+  MultiKey
+    { _mkPrefix :: !BS.ByteString
+    , _mkChildren :: ![MultiKey]
+    , _isEndpoint :: !Bool
+    } deriving (Eq)
 
+-- Example MultiKey trace:
+-- MultiKey
+--   |US| num kids:2
+--     |ATL| num kids:0(end)
+--     |NY| num kids:0(end)
 instance Show MultiKey where
   show mk =
-      "MultiKey\n" ++ go "  " mk
+      "\nMultiKey\n" ++ go "  " mk
     where
-      go indent (MultiKey pre kids) =
-           indent ++ CBS.unpack pre ++ "\n"
+      go indent (MultiKey pre kids isEnd) =
+        indent ++ '|' : CBS.unpack pre ++ '|' :  " num kids:" ++ show (length kids) ++ (if isEnd then "(end)\n" else "\n")
         ++ concatMap (go (' ':' ':indent)) kids
 
 mkInsert :: MultiKey -> BS.ByteString -> MultiKey
-mkInsert (MultiKey "" []) key = MultiKey key []
-mkInsert (MultiKey parent kids) key =
-  case breakCommonPrefix parent key of
-  (_, "", new) ->
-    case kids of
-    (first:rest) ->
-      case mkInsert first new of
-      (MultiKey "" newKids) -> MultiKey parent (newKids ++ rest)
-      newKid -> MultiKey parent (newKid : rest)
+mkInsert (MultiKey "" [] _) key = MultiKey key [] True
+mkInsert (MultiKey prefix kids isEnd) key =
+  case breakCommonPrefix prefix key of
+    (_, "", "") -> MultiKey prefix kids True
+    (_, "", remainingKey) ->
+      case kids of
+        (first:rest) ->
+          case mkInsert first remainingKey of
+            (MultiKey "" newKids _) -> MultiKey prefix (newKids ++ rest) isEnd
+            newKid -> MultiKey prefix (newKid : rest) isEnd
 
-    _ -> MultiKey parent (MultiKey new [] : kids)
+        _ -> MultiKey prefix (MultiKey remainingKey [] True : kids) isEnd
 
-  (newParent, old, "") ->
-    MultiKey newParent [MultiKey old kids]
+    (newPrefix, remainingPrefix, "") ->
+      MultiKey newPrefix [MultiKey remainingPrefix kids isEnd] True
 
-  (newParent, old, new) ->
-    let oldKey = MultiKey old kids
-        newKey = MultiKey new []
-    in MultiKey newParent [newKey, oldKey]
+    (newPrefix, remainingPrefix, remainingKey) ->
+      let oldMultiKey = MultiKey remainingPrefix kids isEnd
+          newMultiKey = MultiKey remainingKey [] True
+       in MultiKey newPrefix [newMultiKey, oldMultiKey] False
 
 mkMultiKey :: [BS.ByteString] -> MultiKey
 mkMultiKey [] = error "Can't build MultiKey with no keys!"
 mkMultiKey keys =
   let (first:rest) = nub (sortBy (flip compare) keys)
-  in foldl' mkInsert (MultiKey first []) rest
+   in foldl' mkInsert (MultiKey first [] True) rest
 
 data DecodedNode = DecodedNode {
     d_arc :: BS.ByteString
@@ -151,18 +161,21 @@ trieLookupMany [] _ = []
 trieLookupMany keys (TI buf rootDrop root) =
     go (mkMultiKey keys) rootDrop root []
   where
-    go (MultiKey subkey kids) arcDrop offset rest =
-      let DecodedNode {
-            d_arc = fullArc
-          , d_subtrieCount = subtrieCount
-          , d_readSubtrieN = readSubtrieN
-          , d_valueCount = valueCount
-          , d_readValueN = readValueN
-          } = decodeNode buf offset
+    go :: MultiKey -> Int -> Int -> [Int] -> [Int]
+    go multiKey arcDrop offset rest =
+      let DecodedNode
+            { d_arc = fullArc
+            , d_subtrieCount = subtrieCount
+            , d_readSubtrieN = readSubtrieN
+            , d_valueCount = valueCount
+            , d_readValueN = readValueN
+            } = decodeNode buf offset
 
           arc = BS.drop arcDrop fullArc
-          (_, remainingKey, remainingArc) = breakCommonPrefix subkey arc
+          (_, remainingMultiKey, remainingArc) = breakCommonPrefixMultiKey multiKey arc
 
+          -- | Gets a list containing the results from recursing into all the subtries of this index with some multikey
+          trySubtries :: MultiKey -> Int -> [Int] -> [Int]
           trySubtries key n cont
             | n < subtrieCount =
               go key
@@ -173,26 +186,34 @@ trieLookupMany keys (TI buf rootDrop root) =
             | otherwise =
               cont
 
-          goKids [] = rest
-          goKids (kid:restKids) =
-            case breakCommonPrefix (mkPrefix kid) remainingArc of
-              (_, "", "") ->
-                readValues 0 (goKids restKids)
-              (_, remainingKid, "") ->
-                trySubtries (kid { mkPrefix = remainingKid })
-                            0
-                            (goKids restKids)
-
-              _ -> goKids restKids
-
+          -- | Reads out all the values from the index and prepend them to a list of other values
+          readValues :: Int -> [Int] -> [Int]
           readValues n cont
             | n < valueCount = readValueN n : readValues (n + 1) cont
             | otherwise = cont
 
-      in case (remainingKey, remainingArc) of
-         ("", "") -> readValues 0 (goKids kids)
-         (_, "") -> trySubtries (MultiKey remainingKey kids) 0 rest
-         _ -> rest
+      in case (remainingMultiKey, remainingArc) of
+           -- if both the MultiKey prefix and the arc were consumed, we need to
+           -- read the values at the current node, and may need to continue
+           -- searching below the node if there are are any query values that
+           -- this node was a prefix of
+           (k@(MultiKey "" kids isEnd), "")
+             | isEnd ->
+               readValues 0 $
+                 -- before we descend to scan subTries, we might as well check
+                 -- that there are actually any kids to scan remaining in the
+                 -- MultiKey
+                 case kids of
+                   [] -> rest
+                   _ -> trySubtries k 0 rest
+
+           -- if the arc was completely consumed by this subkey, we should
+           -- descend into the subtries of this node
+           (k, "") -> trySubtries k 0 rest
+
+           -- if we have remainders from both the key and the arc then theres
+           -- no possibility of finding a match in this branch.
+           _ -> rest
 
 trieElems :: TrieIndex -> [Int]
 trieElems (TI buf _ rootOffset) =
@@ -315,10 +336,33 @@ writeTrieIndex keyFunc vec buf h = do
 
         case () of
           -- keys are identical
+          --   E.G. When processing ABC, ABDA, ABDA
+          --   upon encountering the *second* ABDA we will have:
+          --     ctx: AB
+          --     arc: DA
+          --     key: ABDA
+          --     ctxShared: AB
+          --     ctxLeft: ""
+          --     ctxRight: DA
+          --     arcShared: DA
+          --     arcLeft: ""
+          --     arcRight: ""
+          --
           _ | sameCtx, z arcLeft, z arcRight ->
             writeTrie ctx arc subtries (datOffset:values) (ndx + 1) offset
 
           -- new item is a subtrie of the current arc
+          --   E.G. When processing ABC, ABDA, ABDAX
+          --   upon encountering ABDAX we will have:
+          --     ctx: AB
+          --     arc: DA
+          --     key: ABDAX
+          --     ctxShared: AB
+          --     ctxLeft: ""
+          --     ctxRight: DAX
+          --     arcShared: DA
+          --     arcLeft: ""
+          --     arcRight: X
           _ | sameCtx, z arcLeft -> do
             let subctx = ctx `BS.append` arc
             (sub, newOffset, newNdx) <- writeTrie subctx
@@ -331,6 +375,17 @@ writeTrieIndex keyFunc vec buf h = do
             writeTrie ctx arc (sub:subtries) values newNdx newOffset
 
           -- new item is a separate (non-zero) arc in the same context
+          --   E.G. When processing ABC, ABDA, ABDQ
+          --   upon encountering ABDQ we will have:
+          --     ctx: AB
+          --     arc: DA
+          --     key: ABDQ
+          --     ctxShared: AB
+          --     ctxLeft: ""
+          --     ctxRight: DQ
+          --     arcShared: D
+          --     arcLeft: A
+          --     arcRight: Q
           _ | sameCtx, nz arcShared, nz arcLeft, nz arcRight -> do
             written <- flushTrie arcLeft subtries values
 
@@ -346,6 +401,10 @@ writeTrieIndex keyFunc vec buf h = do
 
             writeTrie ctx arcShared [subR,subL] [] newNdx newOffset
 
+          -- the item examined was not part of our parent trie's context,
+          -- so we can flush the current arc and return without moving
+          -- on to the next index in the array. The current item will be
+          -- reconsidered further up the recursion chain.
           _ -> do
             bytesWritten <- flushTrie arc subtries values
             pure (offset, offset + bytesWritten, ndx)
@@ -357,7 +416,7 @@ writeTrieIndex keyFunc vec buf h = do
     flushTrie :: BS.ByteString
               -> [Int]  -- subtrie offsets
               -> [Int]  -- value offsets
-              -> IO Int -- BytesTritten
+              -> IO Int -- Bytes written
     flushTrie arc subtries values = do
       let arcLength = BS.length arc
 
@@ -378,6 +437,12 @@ writeTrieIndex keyFunc vec buf h = do
 
       pure $ byteCount
 
+-- Returns a triple where the first element is the prefix string
+-- that both inputs have in common, the second element is the
+-- remaining portion of the first input that didn't match, and
+-- the third is the remaining portion of the key that
+-- didn't match.
+-- ( common prefix, remaining arc, remaining key)
 breakCommonPrefix :: BS.ByteString
                   -> BS.ByteString
                   -> (BS.ByteString, BS.ByteString, BS.ByteString)
@@ -387,3 +452,27 @@ breakCommonPrefix b1 b2 =
      , BS.drop prefixLength b1
      , BS.drop prefixLength b2
      )
+
+breakCommonPrefixMultiKey :: MultiKey
+                          -> BS.ByteString
+                          -> (BS.ByteString, MultiKey, BS.ByteString)
+breakCommonPrefixMultiKey (MultiKey prefix kids isEnd) arc =
+  case breakCommonPrefix prefix arc of
+    -- The entire MultiKey prefix was a prefix of the arc, AND there was some
+    -- arc remaining, so we need descend to kids of the MultiKey and continue
+    -- breaking
+    -- Is there a better way to scan through the children multikeys than dropWhile?
+    -- By nature of the MultiKey data structure, only one child can possibly match
+    (common, "", remArc) | not (BS.null remArc) ->
+      let commonIsEmpty ("", _, _) = True
+          commonIsEmpty _          = False
+       in case dropWhile commonIsEmpty $ map (\k -> breakCommonPrefixMultiKey k remArc) kids of
+            ((common', key, remArc'):_) -> (common <> common', key, remArc')
+            _                           -> (common, MultiKey "" [] False, remArc)
+
+    -- If there is any remaining prefix from the original MultiKey *OR* there
+    -- was any remaining arc that didn't match with the original Prefix, then
+    -- we definitely don't need to descend into the kids. We can just return
+    -- a new MultiKey with the remaining prefix
+    (common, remPrefix, remArc) ->
+      (common, MultiKey remPrefix kids isEnd, remArc)
