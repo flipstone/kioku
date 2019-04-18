@@ -30,12 +30,13 @@ library:
   - directory
   - filepath
   - mmap
-  - vector
-  - vector-algorithms >=0.8.0.1
   - reinterpret-cast
   - tar
   - temporary
   - text
+  - transformers
+  - vector
+  - vector-algorithms >=0.8.0.1
 executables:
   kioku-benchmarks:
     main: benchmarks/Main.hs

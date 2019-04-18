@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Database.Kioku.Internal.TrieIndex
   ( bufferTrieIndex
   , TrieIndex
@@ -6,6 +7,9 @@ module Database.Kioku.Internal.TrieIndex
   , trieMatch
   , trieLookupMany
   , trieFirstStopAlong
+  , trieSize
+  , breakCommonPrefix
+  , buildSortedOffsetArray
   ) where
 
 import            Control.Applicative
@@ -476,3 +480,19 @@ breakCommonPrefixMultiKey (MultiKey prefix kids isEnd) arc =
     -- a new MultiKey with the remaining prefix
     (common, remPrefix, remArc) ->
       (common, MultiKey remPrefix kids isEnd, remArc)
+
+trieSize :: TrieIndex -> Int
+trieSize (TI buf _ root) = go root 0 where
+  go offset !total =
+    let DecodedNode
+          { d_subtrieCount = subtrieCount
+          , d_readSubtrieN = readSubtrieN
+          } = decodeNode buf offset
+
+        goSub n !t
+          | n < subtrieCount = go (readSubtrieN n) (goSub (n + 1) t)
+          | otherwise = t
+
+     in if subtrieCount == 0
+           then total + 1
+           else goSub 0 (total + 1)

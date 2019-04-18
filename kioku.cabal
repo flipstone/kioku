@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8467feab6f107122a933ea46bd087b078874c22a75a05d581609935b403a7d8c
+-- hash: 368944afebbe383e320d187a0af44706bd2842fe99cc143fe2d8148653e8979d
 
 name:           kioku
 version:        0.1.2.1
@@ -28,6 +28,7 @@ library
       Database.Kioku.Internal.BufferMap
       Database.Kioku.Internal.KiokuDB
       Database.Kioku.Internal.Query
+      Database.Kioku.Internal.RankedIndex
       Database.Kioku.Internal.TrieIndex
       Paths_kioku
   hs-source-dirs:
@@ -47,6 +48,7 @@ library
     , tar
     , temporary
     , text
+    , transformers
     , vector
     , vector-algorithms >=0.8.0.1
     , zlib
@@ -84,6 +86,7 @@ test-suite kioku-test
   main-is: Driver.hs
   other-modules:
       QueryTest
+      RankTest
       Paths_kioku
   hs-source-dirs:
       test

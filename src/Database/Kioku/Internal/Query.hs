@@ -32,4 +32,3 @@ runQuery :: Memorizable a
 runQuery kQuery indexBuffer dataBuffer =
   map (readRowAt dataBuffer)
     $ kqFunc kQuery (bufferTrieIndex indexBuffer)
-

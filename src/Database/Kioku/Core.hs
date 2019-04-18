@@ -1,17 +1,20 @@
 module Database.Kioku.Core
   ( KiokuDB, KiokuQuery, KiokuException
   , DataSetName, IndexName, SchemaName
+  , HasRank(..), newRankHeap, heapToList, heapInsert, heapMin, heapMerge
   , openKiokuDB, defaultKiokuPath
   , closeKiokuDB, withKiokuDB
 
   , createDataSet
   , createIndex
+  , createRankedIndex
   , createSchema
   , query, keyExact, keyExactIn, keyPrefix, firstStopAlong
 
   , gcKiokuDB, validateDB
   , packKiokuDB, exportKiokuDB
   , unpackKiokuDB, importKiokuDB
+  , getIndexSize
   ) where
 
 import            Control.Exception
@@ -36,6 +39,7 @@ import            System.IO.Temp
 import            Database.Kioku.Internal.BufferMap
 import            Database.Kioku.Internal.KiokuDB
 import            Database.Kioku.Internal.TrieIndex
+import            Database.Kioku.Internal.RankedIndex
 import            Database.Kioku.Internal.Query
 import            Database.Kioku.Memorizable
 
@@ -336,6 +340,31 @@ createIndex dataSetName idxName keyFunc db = do
 
   writeIndexFile idxName indexFile db
 
+createRankedIndex :: (HasRank a, Memorizable a)
+            => DataSetName
+            -> IndexName
+            -> (a -> BS.ByteString)
+            -> Int
+            -> KiokuDB
+            -> IO ()
+createRankedIndex dataSetName idxName keyFunc itemLimit db = do
+  dataSetFile <- readDataSetFile dataSetName db
+  dataBuf <- openDataBuffer (dataSetHash dataSetFile) db
+  tmpFile <- writeRanked keyFunc itemLimit dataBuf $ \flushIndex -> do
+    (tmpFile, h) <- openTempFile (tmpDir db) idxName
+    flushIndex h
+    hClose h
+    pure tmpFile
+
+  sha <- hashFile tmpFile
+  renameFile tmpFile (dataFilePath db sha)
+
+  let indexFile = IndexFile { indexHash = sha
+                            , dataHash = dataSetHash dataSetFile
+                            }
+
+  writeIndexFile idxName indexFile db
+
 query :: Memorizable a
       => IndexName
       -> KiokuQuery
@@ -348,4 +377,11 @@ query name kQuery db = do
 
   pure $ runQuery kQuery indexBuf dataBuf
 
-
+getIndexSize :: IndexName
+             -> KiokuDB
+             -> IO Int
+getIndexSize name db = do
+  indexFile <- throwErrors $ readIndexFile name db
+  indexBuf <-  openDataBuffer (indexHash indexFile) db
+  let index = bufferTrieIndex indexBuf
+  pure $ trieSize index
