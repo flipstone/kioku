@@ -50,7 +50,7 @@ printCities cities =
     CBS.putStr   $ cityLng city
     CBS.putStrLn $ ")"
 
-data City = City 
+data City = City
   { cityName :: BS.ByteString
   , cityLat :: BS.ByteString
   , cityLng :: BS.ByteString

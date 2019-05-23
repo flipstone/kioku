@@ -95,6 +95,40 @@ test_queries =
             , queryTestQuery    = keyExactIn $ testDataKey <$> [ TestData "USNY", TestData "USN" ]
             , queryTestExpected = [ TestData "USNY", TestData "USN" ]
             }
+
+    , testCase "finds multiple results for keyAllHitsAlong with single-character nodes" $
+        runQueryTest $
+          QueryTest
+            { queryTestData     = [ TestData "1", TestData "15", TestData "16", TestData "17", TestData "165" ]
+            , queryTestQuery    = keyAllHitsAlong . testDataKey $ TestData "168"
+            , queryTestExpected = [ TestData "1", TestData "16" ]
+            }
+
+    , testCase "finds multiple results for keyAllHitsAlong with multi-character nodes" $
+        runQueryTest $
+          QueryTest
+            { queryTestData     = [ TestData "101", TestData "1015", TestData "1016", TestData "1017", TestData "10165" ]
+            , queryTestQuery    = keyAllHitsAlong . testDataKey $ TestData "10168"
+            , queryTestExpected = [ TestData "101", TestData "1016" ]
+            }
+
+    , testCase "finds result for keyPrefix with multi-character nodes" $
+        runQueryTest $
+          QueryTest
+            { queryTestData     = [ TestData "101", TestData "1015", TestData "1016", TestData "1017", TestData "10165" ]
+            , queryTestQuery    = keyPrefix . testDataKey $ TestData "1016"
+            , queryTestExpected = [ TestData "1016", TestData "10165" ]
+            }
+
+    , testCase "finds results for keyExact with multi-character nodes" $
+        runQueryTest $
+          QueryTest
+            { queryTestData     = [ TestData "101", TestData "1015", TestData "1016", TestData "1017", TestData "10165" ]
+            , queryTestQuery    = keyExact . testDataKey $ TestData "1016"
+            , queryTestExpected = [ TestData "1016" ]
+            }
+
+
     ]
 
 data QueryTest =

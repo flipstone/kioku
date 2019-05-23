@@ -5,6 +5,7 @@ module Database.Kioku.Internal.TrieIndex
   , trieLookup
   , trieMatch
   , trieLookupMany
+  , trieAllHitsAlong
   , trieFirstStopAlong
   ) where
 
@@ -23,12 +24,27 @@ import            System.IO
 import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
 
-
 trieLookup :: BS.ByteString -> TrieIndex -> [Int]
 trieLookup key = maybe [] trieRootElems . lookupSubtrie key
 
 trieMatch :: BS.ByteString -> TrieIndex -> [Int]
 trieMatch prefix = maybe [] trieElems . lookupSubtrie prefix
+
+trieAllHitsAlong :: BS.ByteString -> TrieIndex -> [Int]
+trieAllHitsAlong "" _ = []
+trieAllHitsAlong key trie =
+  let (p,ath) = BS.splitAt 1 key
+  in concat $ go p ath trie
+    where
+      go prefix remaining trie' =
+        let (p', ath') = BS.splitAt 1 remaining
+        in case lookupSubtrie prefix trie' of
+             Nothing -> if BS.null remaining
+                          then []
+                          else go p' ath' trie'
+             Just subtrie -> case trieRootElems subtrie of
+                               []    -> go p' ath' subtrie
+                               elems -> elems : go p' ath' subtrie
 
 trieFirstStopAlong :: BS.ByteString -> TrieIndex -> [Int]
 trieFirstStopAlong "" _ = []
@@ -37,8 +53,8 @@ trieFirstStopAlong path trie =
       Nothing -> []
       Just subtrie ->
         case trieRootElems subtrie of
-        [] -> trieFirstStopAlong ath subtrie
-        elems -> elems
+          []    -> trieFirstStopAlong ath subtrie
+          elems -> elems
   where
     (p,ath) = BS.splitAt 1 path
 
@@ -54,7 +70,6 @@ data TrieIndex = TI {
   , _tiArcDrop :: Int
   , _tiRoot :: Int
   }
-
 
 lookupSubtrie :: BS.ByteString -> TrieIndex -> Maybe TrieIndex
 lookupSubtrie key (TI buf rootDrop root) =
@@ -81,7 +96,7 @@ lookupSubtrie key (TI buf rootDrop root) =
                                 <|> trySubtries rest
 
       in case (remainingKey, remainingArc) of
-         ("", _) -> Just $ TI buf (BS.length commonArc) offset
+         ("", _) -> Just $ TI buf (BS.length commonArc + arcDrop) offset
          (_, "") -> trySubtries subtries
          _ -> Nothing
 
@@ -195,7 +210,7 @@ trieLookupMany keys (TI buf rootDrop root) =
       in case (remainingMultiKey, remainingArc) of
            -- if both the MultiKey prefix and the arc were consumed, we need to
            -- read the values at the current node, and may need to continue
-           -- searching below the node if there are are any query values that
+           -- searching below the node if there are any query values that
            -- this node was a prefix of
            (k@(MultiKey "" kids isEnd), "")
              | isEnd ->

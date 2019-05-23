@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8467feab6f107122a933ea46bd087b078874c22a75a05d581609935b403a7d8c
+-- hash: 7075b1bb2c1f3aa5fd3efae9cec11fd5e64ae23cbf3f3ca3aaac2b1dfeddce04
 
 name:           kioku
-version:        0.1.2.1
+version:        0.1.2.2
 synopsis:       A library for indexing and querying static datasets on disk
 category:       Database
 homepage:       http://github.com/flipstone/kioku
