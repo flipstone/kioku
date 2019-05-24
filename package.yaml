@@ -36,6 +36,7 @@ library:
   - tar
   - temporary
   - text
+  - dlist
 executables:
   kioku-benchmarks:
     main: benchmarks/Main.hs

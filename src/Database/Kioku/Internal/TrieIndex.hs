@@ -12,6 +12,7 @@ module Database.Kioku.Internal.TrieIndex
 import            Control.Applicative
 import qualified  Data.ByteString as BS
 import qualified  Data.ByteString.Char8 as CBS
+import qualified  Data.DList as DList
 import            Data.Foldable
 import            Data.Function
 import            Data.List
@@ -31,17 +32,18 @@ trieMatch :: BS.ByteString -> TrieIndex -> [Int]
 trieMatch prefix = maybe [] trieElems . lookupSubtrie prefix
 
 trieAllHitsAlong :: BS.ByteString -> TrieIndex -> [Int]
-trieAllHitsAlong = go []
+trieAllHitsAlong k t = DList.toList $ go mempty k t
   where
-    go results "" trie = concat $ trieRootElems trie : results
+    getElems = DList.fromList . trieRootElems
+    go results "" trie = results <> getElems trie
     go results key trie@(TI _ _ offset) =
       let (p, ath) = BS.splitAt 1 key
        in case lookupSubtrie p trie of
-            Nothing -> concat $ trieRootElems trie : results
+            Nothing -> results <> getElems trie
             Just subtrie@(TI _ _ subOffset) ->
               if offset == subOffset
                  then go results ath subtrie
-                 else go (trieRootElems trie : results) ath subtrie
+                 else go (results <> getElems trie) ath subtrie
 
 trieFirstStopAlong :: BS.ByteString -> TrieIndex -> [Int]
 trieFirstStopAlong "" _ = []
