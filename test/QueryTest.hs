@@ -107,9 +107,9 @@ test_queries =
     , testCase "finds multiple results for keyAllHitsAlong with multi-character nodes" $
         runQueryTest $
           QueryTest
-            { queryTestData     = [ TestData "101", TestData "1015", TestData "1016", TestData "1017", TestData "10165" ]
-            , queryTestQuery    = keyAllHitsAlong . testDataKey $ TestData "10168"
-            , queryTestExpected = [ TestData "101", TestData "1016" ]
+            { queryTestData     = [ TestData "101", TestData "1010", TestData "101005", TestData "101006", TestData "101007", TestData "1010065", TestData "1010068" ]
+            , queryTestQuery    = keyAllHitsAlong . testDataKey $ TestData "1010068"
+            , queryTestExpected = [ TestData "101", TestData "1010", TestData "101006", TestData "1010068" ]
             }
 
     , testCase "finds result for keyPrefix with multi-character nodes" $

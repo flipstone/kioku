@@ -31,20 +31,17 @@ trieMatch :: BS.ByteString -> TrieIndex -> [Int]
 trieMatch prefix = maybe [] trieElems . lookupSubtrie prefix
 
 trieAllHitsAlong :: BS.ByteString -> TrieIndex -> [Int]
-trieAllHitsAlong "" _ = []
-trieAllHitsAlong key trie =
-  let (p,ath) = BS.splitAt 1 key
-  in concat $ go p ath trie
-    where
-      go prefix remaining trie' =
-        let (p', ath') = BS.splitAt 1 remaining
-        in case lookupSubtrie prefix trie' of
-             Nothing -> if BS.null remaining
-                          then []
-                          else go p' ath' trie'
-             Just subtrie -> case trieRootElems subtrie of
-                               []    -> go p' ath' subtrie
-                               elems -> elems : go p' ath' subtrie
+trieAllHitsAlong = go []
+  where
+    go results "" trie = concat $ trieRootElems trie : results
+    go results key trie@(TI _ _ offset) =
+      let (p, ath) = BS.splitAt 1 key
+       in case lookupSubtrie p trie of
+            Nothing -> concat $ trieRootElems trie : results
+            Just subtrie@(TI _ _ subOffset) ->
+              if offset == subOffset
+                 then go results ath subtrie
+                 else go (trieRootElems trie : results) ath subtrie
 
 trieFirstStopAlong :: BS.ByteString -> TrieIndex -> [Int]
 trieFirstStopAlong "" _ = []
