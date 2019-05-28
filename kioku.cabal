@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8554b891f12a160b185ef415bc9c759684c9207b11c6f4aec488830cb921c311
+-- hash: 7075b1bb2c1f3aa5fd3efae9cec11fd5e64ae23cbf3f3ca3aaac2b1dfeddce04
 
 name:           kioku
 version:        0.1.2.2
@@ -41,7 +41,6 @@ library
     , containers
     , cryptohash
     , directory
-    , dlist
     , filepath
     , mmap
     , reinterpret-cast

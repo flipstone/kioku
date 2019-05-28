@@ -12,7 +12,6 @@ module Database.Kioku.Internal.TrieIndex
 import            Control.Applicative
 import qualified  Data.ByteString as BS
 import qualified  Data.ByteString.Char8 as CBS
-import qualified  Data.DList as DList
 import            Data.Foldable
 import            Data.Function
 import            Data.List
@@ -26,24 +25,23 @@ import            Database.Kioku.Internal.Buffer
 import            Database.Kioku.Memorizable
 
 trieLookup :: BS.ByteString -> TrieIndex -> [Int]
-trieLookup key = maybe [] trieRootElems . lookupSubtrie key
+trieLookup key = maybe [] (trieRootElems []) . lookupSubtrie key
 
 trieMatch :: BS.ByteString -> TrieIndex -> [Int]
 trieMatch prefix = maybe [] trieElems . lookupSubtrie prefix
 
 trieAllHitsAlong :: BS.ByteString -> TrieIndex -> [Int]
-trieAllHitsAlong k t = DList.toList $ go mempty k t
+trieAllHitsAlong = go []
   where
-    getElems = DList.fromList . trieRootElems
-    go results "" trie = results <> getElems trie
+    go results "" trie = trieRootElems results trie
     go results key trie@(TI _ _ offset) =
       let (p, ath) = BS.splitAt 1 key
        in case lookupSubtrie p trie of
-            Nothing -> results <> getElems trie
+            Nothing -> trieRootElems results trie
             Just subtrie@(TI _ _ subOffset) ->
               if offset == subOffset
                  then go results ath subtrie
-                 else go (results <> getElems trie) ath subtrie
+                 else go (trieRootElems results trie) ath subtrie
 
 trieFirstStopAlong :: BS.ByteString -> TrieIndex -> [Int]
 trieFirstStopAlong "" _ = []
@@ -51,7 +49,7 @@ trieFirstStopAlong path trie =
     case lookupSubtrie p trie of
       Nothing -> []
       Just subtrie ->
-        case trieRootElems subtrie of
+        case trieRootElems [] subtrie of
           []    -> trieFirstStopAlong ath subtrie
           elems -> elems
   where
@@ -253,8 +251,8 @@ trieElems (TI buf _ rootOffset) =
 
       in goValues 0
 
-trieRootElems :: TrieIndex -> [Int]
-trieRootElems (TI buf arcDrop offset) =
+trieRootElems :: [Int] -> TrieIndex -> [Int]
+trieRootElems results (TI buf arcDrop offset) =
     let DecodedNode {
           d_arc = arc
         , d_valueCount = valueCount
@@ -263,13 +261,13 @@ trieRootElems (TI buf arcDrop offset) =
 
         goValues n
           | n < valueCount = readValueN n : goValues (n + 1)
-          | otherwise = []
+          | otherwise = results
 
         valuesAtRoot = BS.length arc == arcDrop
 
     in if valuesAtRoot
        then goValues 0
-       else []
+       else results
 
 
 writeIndex :: Memorizable a
