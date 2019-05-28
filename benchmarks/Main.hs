@@ -1,11 +1,16 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Main where
 
+import            Control.DeepSeq (NFData, deepseq)
 import            Control.Exception
+import            Control.Monad (replicateM, void)
 import qualified  Data.ByteString as BS
 import            Data.Time.Clock.POSIX
+import            Data.Foldable (for_)
 import            System.IO
 
 import            Database.Kioku.Memorizable
+import            Database.Kioku
 
 main :: IO ()
 main = do
@@ -21,6 +26,8 @@ main = do
 
   bench trials "memPrefixed65535" item (memPrefixed65535)
   bench trials "recallPrefixed65535" (memPrefixed65535 item) recallPrefixed65535
+
+  benchQueries 1000
 
 
 bench :: Int -> String -> a -> (a -> b) -> IO ()
@@ -48,6 +55,48 @@ bench count name a f = do
     seqN 0 _ _ = ()
     seqN n f' a' = f' a' `seq` seqN (n - 1) f' a'
 
+
+benchmarkData :: [TestData]
+benchmarkData = [ TestData "101"
+                , TestData "1010"
+                , TestData "101005"
+                , TestData "101006"
+                , TestData "101007"
+                , TestData "1010065"
+                , TestData "1010068"
+                ]
+
+benchQueries :: Int -> IO ()
+benchQueries count = do
+  let queries = [ ("keyExact", keyExact "1010065")
+                , ("keyExactIn", keyExactIn ["1010065"])
+                , ("keyPrefix", keyPrefix "101")
+                , ("keyAllHitsAlong", keyAllHitsAlong "1010068")
+                ]
+
+  withKiokuDB defaultKiokuPath $ \db -> do
+    void $ createDataSet "kioku_bench" benchmarkData db
+    createIndex "kioku_bench" "kioku_bench.index" testDataKey db
+
+    for_ queries $ \(queryName, q) -> do
+      putStr $ queryName ++ " (" ++ show count ++ ")"
+      start <- getPOSIXTime
+
+      _ <- replicateM count $ do
+        results <- query "kioku_bench.index" q db :: IO [TestData]
+        results `deepseq` pure ()
+
+      finish <- getPOSIXTime
+
+      let time = finish - start
+          millis :: Int
+          millis = round (1000 * time)
+          opsPerSecond :: Double
+          opsPerSecond = realToFrac count / realToFrac time
+
+      putStrLn $ " - "
+              ++ show millis ++ " milliseconds, "
+              ++ (formatExponential 1 opsPerSecond) ++ " ops/second"
 
 data BenchItem = BenchItem {
     field1 :: !BS.ByteString
@@ -108,3 +157,12 @@ formatExponential precision d =
 
     sig10 = sigRadix * (10 ** exp10Frac)
 
+newtype TestData = TestData BS.ByteString
+  deriving (Eq, Ord, Show, NFData)
+
+instance Memorizable TestData where
+  memorize (TestData bytes) = bytes
+  recall = TestData
+
+testDataKey :: TestData -> BS.ByteString
+testDataKey (TestData bytes) = bytes

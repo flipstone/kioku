@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7075b1bb2c1f3aa5fd3efae9cec11fd5e64ae23cbf3f3ca3aaac2b1dfeddce04
+-- hash: dfbd46357b7e54321be6177df42f76ba21b1ed5b476ebed362f98bd6db8ca265
 
 name:           kioku
 version:        0.1.2.2
@@ -61,6 +61,7 @@ executable kioku-benchmarks
   build-depends:
       base >=4.8 && <4.13
     , bytestring
+    , deepseq
     , kioku
     , time
     , zlib

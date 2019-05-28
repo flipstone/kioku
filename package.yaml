@@ -45,6 +45,7 @@ executables:
     dependencies:
     - time
     - kioku
+    - deepseq
   kioku-example:
     main: example/Main.hs
     default-extensions:
