@@ -34,7 +34,7 @@ trieAllHitsAlong :: BS.ByteString -> TrieIndex -> [Int]
 trieAllHitsAlong = go []
   where
     go results "" trie = trieRootElems results trie
-    go results key trie@(TI _ _ offset) =
+    go results key trie =
       let (p, ath) = BS.splitAt 1 key
           addElemsToResults = trieRootElems results trie
        in case lookupSubtrie p trie of
@@ -43,15 +43,17 @@ trieAllHitsAlong = go []
             -- haven't completely matched the trie, it's still OK to do this here since
             -- trieRootElems will only produce when the trie is completely matched.
             Nothing -> addElemsToResults
-            Just subtrie@(TI _ _ subOffset) ->
-              -- Since offset uniquely identifies a Trie, we use this comparison to determine
-              -- if we have completely matched the prefix of the current trie and are entering
-              -- a new subtrie. If we have, then that is the time to read out the elements of
-              -- the current trie, otherwise we don't need to do so. This negates deserializing
-              -- Trie nodes needlessly.
-              if offset == subOffset
-                 then go results ath subtrie
-                 else go addElemsToResults ath subtrie
+            Just subtrie ->
+              if enteringNewTrie trie subtrie
+                 then go addElemsToResults ath subtrie
+                 else go results ath subtrie
+
+    -- Since offset uniquely identifies a Trie, we use this comparison to determine
+    -- if we have completely matched the prefix of the current trie and are entering
+    -- a new subtrie. If we have, then that is the time to read out the elements of
+    -- the current trie, otherwise we don't need to do so. This negates deserializing
+    -- Trie nodes needlessly.
+    enteringNewTrie (TI _ _ offset) (TI _ _ subOffset) = offset /= subOffset
 
 trieFirstStopAlong :: BS.ByteString -> TrieIndex -> [Int]
 trieFirstStopAlong "" _ = []
