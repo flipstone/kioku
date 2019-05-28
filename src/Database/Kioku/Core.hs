@@ -7,7 +7,7 @@ module Database.Kioku.Core
   , createDataSet
   , createIndex
   , createSchema
-  , query, keyExact, keyExactIn, keyPrefix, keyAllHitsAlong, firstStopAlong
+  , query, keyExact, keyExactIn, keyPrefix, keyAllHitsAlong
 
   , gcKiokuDB, validateDB
   , packKiokuDB, exportKiokuDB

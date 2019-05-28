@@ -6,7 +6,6 @@ module Database.Kioku.Internal.TrieIndex
   , trieMatch
   , trieLookupMany
   , trieAllHitsAlong
-  , trieFirstStopAlong
   ) where
 
 import            Control.Applicative
@@ -54,18 +53,6 @@ trieAllHitsAlong = go []
     -- the current trie, otherwise we don't need to do so. This negates deserializing
     -- Trie nodes needlessly.
     enteringNewTrie (TI _ _ offset) (TI _ _ subOffset) = offset /= subOffset
-
-trieFirstStopAlong :: BS.ByteString -> TrieIndex -> [Int]
-trieFirstStopAlong "" _ = []
-trieFirstStopAlong path trie =
-    case lookupSubtrie p trie of
-      Nothing -> []
-      Just subtrie ->
-        case trieRootElems [] subtrie of
-          []    -> trieFirstStopAlong ath subtrie
-          elems -> elems
-  where
-    (p,ath) = BS.splitAt 1 path
 
 bufferTrieIndex :: Buffer -> TrieIndex
 bufferTrieIndex buf =

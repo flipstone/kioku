@@ -4,7 +4,6 @@ module Database.Kioku.Internal.Query
   , keyExactIn
   , keyPrefix
   , keyAllHitsAlong
-  , firstStopAlong
   , runQuery
   ) where
 
@@ -27,9 +26,6 @@ keyPrefix key = KQ (trieMatch key)
 
 keyAllHitsAlong :: BS.ByteString -> KiokuQuery
 keyAllHitsAlong path = KQ (trieAllHitsAlong path)
-
-firstStopAlong :: BS.ByteString -> KiokuQuery
-firstStopAlong path = KQ (trieFirstStopAlong path)
 
 runQuery :: Memorizable a
          => KiokuQuery
