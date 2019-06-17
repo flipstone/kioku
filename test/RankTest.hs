@@ -30,7 +30,7 @@ test_rank =
 
     , testProperty "picks the top 10" $ HH.property $ do
         cities <- HH.forAll citiesGen
-        let topTen = take 10 . reverse $ sort cities
+        let topTen = reverse . take 10 . reverse $ sort cities
 
         heap <- liftIO $ newRankHeap 10
         let action = foldr (\x h -> h >>= heapInsert x) (pure heap) cities
@@ -50,7 +50,7 @@ test_rank =
 
         merged <- liftIO $ heapMerge heap1' heap2'
         result <- liftIO $ heapToList merged
-        let top10 = take 10 . reverse . sort $ cities1 ++ cities2
+        let top10 = reverse . take 10 . reverse . sort $ cities1 ++ cities2
 
         result HH.=== top10
     ]
