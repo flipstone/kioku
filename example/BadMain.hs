@@ -32,10 +32,6 @@ main = do
         cities <- query "cities.name" (keyPrefix $ CBS.pack name) db
         printCities cities
 
-      ("cities":"first_stop":name:_) -> do
-        cities <- query "cities.name" (firstStopAlong $ CBS.pack name) db
-        printCities cities
-
       _ -> do
         putStrLn $ "Unknown command: " ++ unwords args
         exitWith (ExitFailure 1)
