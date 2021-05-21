@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Database.Kioku.Internal.TrieIndex
   ( bufferTrieIndex
   , TrieIndex
@@ -14,7 +15,10 @@ import qualified  Data.ByteString.Char8 as CBS
 import            Data.Foldable
 import            Data.Function
 import            Data.List
+#if MIN_VERSION_base(4,11,0)
+#else
 import            Data.Monoid ((<>))
+#endif
 import qualified  Data.Proxy as P
 import qualified  Data.Vector.Unboxed.Mutable as V
 import qualified  Data.Vector.Algorithms.AmericanFlag as S

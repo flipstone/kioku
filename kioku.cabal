@@ -1,13 +1,13 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.1.
+-- This file has been generated from package.yaml by hpack version 0.33.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8467feab6f107122a933ea46bd087b078874c22a75a05d581609935b403a7d8c
+-- hash: d1fe2b0ecb8ba2cc4f7482ec1321da83d5355e46cd73f799c9f18b6de823ead6
 
 name:           kioku
-version:        0.1.2.1
+version:        0.1.2.2
 synopsis:       A library for indexing and querying static datasets on disk
 category:       Database
 homepage:       http://github.com/flipstone/kioku
@@ -35,7 +35,7 @@ library
   default-extensions: OverloadedStrings
   ghc-options: -Wall -fprof-auto -Werror
   build-depends:
-      base >=4.8 && <4.13
+      base >=4.8
     , base16-bytestring
     , bytestring
     , containers
@@ -59,7 +59,7 @@ executable kioku-benchmarks
   default-extensions: OverloadedStrings
   ghc-options: -Wall -fprof-auto -Werror -O3 -rtsopts
   build-depends:
-      base >=4.8 && <4.13
+      base >=4.8
     , bytestring
     , kioku
     , time
@@ -73,7 +73,7 @@ executable kioku-example
   default-extensions: OverloadedStrings RecordWildCards
   ghc-options: -Wall -fprof-auto -Werror -O3
   build-depends:
-      base >=4.8 && <4.13
+      base >=4.8
     , bytestring
     , kioku
     , zlib
@@ -90,7 +90,7 @@ test-suite kioku-test
   default-extensions: OverloadedStrings
   ghc-options: -Wall -fprof-auto -Werror -O3
   build-depends:
-      base >=4.8 && <4.13
+      base >=4.8
     , bytestring
     , containers
     , deepseq

@@ -1,5 +1,5 @@
 name: kioku
-version: '0.1.2.1'
+version: '0.1.2.2'
 synopsis: A library for indexing and querying static datasets on disk
 category: Database
 author: Flipstone Technology Partners
@@ -13,7 +13,7 @@ ghc-options:
 - -fprof-auto
 - -Werror
 dependencies:
-- base >=4.8 && <4.13
+- base >=4.8
 - bytestring
 - zlib
 library:
