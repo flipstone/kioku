@@ -39,7 +39,8 @@ packages:
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
-  - tasty-hedgehog-0.2.0.0@sha256:83a8b777fa472040979e44dba43c32441f55d5ddb9641a4d53deee4b0e09fa34
+ - hedgehog-1.0.5@sha256:85a2d8df595c91b815e9d2ef7734189d7028ce16212e83f35b2221807d87770b,4368
+ - tasty-hedgehog-1.1.0.0@sha256:e1289602588b87caa809bd58f8af169738a37dcd8d579eb4a79a540a788c8f22,1803
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
