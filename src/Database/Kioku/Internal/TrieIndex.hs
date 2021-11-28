@@ -143,10 +143,10 @@ mkInsert (MultiKey prefix kids isEnd) key =
        in MultiKey newPrefix [newMultiKey, oldMultiKey] False
 
 mkMultiKey :: [BS.ByteString] -> MultiKey
-mkMultiKey [] = error "Can't build MultiKey with no keys!"
 mkMultiKey keys =
-  let (first:rest) = nub (sortBy (flip compare) keys)
-   in foldl' mkInsert (MultiKey first [] True) rest
+  case nub (sortBy (flip compare) keys) of
+    [] -> error "Can't build MultiKey with no keys!"
+    first:rest -> foldl' mkInsert (MultiKey first [] True) rest
 
 data DecodedNode = DecodedNode {
     d_arc :: BS.ByteString
