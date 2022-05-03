@@ -20,6 +20,7 @@ module Database.Kioku.Memorizable
   , memorizeFloat, recallFloat
 
   , memorizeText, recallText
+  , memorizeNonEmptyText, recallNonEmptyText
   , memorizeEnum, recallEnum
 
   , roll
@@ -40,6 +41,8 @@ import qualified  Data.ByteString as BS
 import qualified  Data.ByteString.Unsafe as UBS
 import            Data.Bits
 import            Data.Int
+import qualified  Data.Maybe as Maybe
+import qualified  Data.NonEmptyText as NET
 import            Data.ReinterpretCast
 import            Data.Text (Text)
 import qualified  Data.Text.Encoding as E
@@ -64,6 +67,14 @@ memorizeText = E.encodeUtf8
 {-# INLINE recallText #-}
 recallText :: BS.ByteString -> Text
 recallText = E.decodeUtf8
+
+{-# INLINE memorizeNonEmptyText #-}
+memorizeNonEmptyText :: NET.NonEmptyText -> BS.ByteString
+memorizeNonEmptyText = E.encodeUtf8 . NET.toText
+
+{-# INLINE recallNonEmptyText #-}
+recallNonEmptyText :: BS.ByteString -> NET.NonEmptyText
+recallNonEmptyText = Maybe.fromJust . NET.fromText . E.decodeUtf8
 
 memorizeWord16 :: Word16 -> BS.ByteString
 memorizeWord16 n = {-# SCC memorizeWord16 #-}
@@ -337,6 +348,10 @@ instance Memorizable BS.ByteString where
 instance Memorizable Text where
   memorize = memorizeText
   recall = recallText
+
+instance Memorizable NET.NonEmptyText where
+  memorize = memorizeNonEmptyText
+  recall = recallNonEmptyText
 
 instance Memorizable Word8 where
   memorize = memorizeWord8

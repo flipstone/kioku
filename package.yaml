@@ -30,6 +30,7 @@ library:
   - directory
   - filepath
   - mmap
+  - non-empty-text
   - vector
   - vector-algorithms >=0.8.0.1
   - reinterpret-cast
