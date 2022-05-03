@@ -37,16 +37,17 @@ module Database.Kioku.Memorizable
   , MemorizeLength, RecallLength, LengthSize
   ) where
 
-import qualified  Data.ByteString as BS
-import qualified  Data.ByteString.Unsafe as UBS
-import            Data.Bits
-import            Data.Int
-import qualified  Data.Maybe as Maybe
-import qualified  Data.NonEmptyText as NET
-import            Data.ReinterpretCast
-import            Data.Text (Text)
-import qualified  Data.Text.Encoding as E
-import            Data.Word
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Unsafe as UBS
+import           Data.Bits
+import           Data.Int
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Maybe as Maybe
+import qualified Data.NonEmptyText as NET
+import           Data.ReinterpretCast
+import           Data.Text (Text)
+import qualified Data.Text.Encoding as E
+import           Data.Word
 
 class Memorizable a where
   memorize :: a -> BS.ByteString
@@ -425,3 +426,21 @@ instance (Memorizable a, Memorizable b) => Memorizable (Either a b) where
     1 -> Right $ recall $ BS.drop 1 bs
     n -> error $ "recall: Invalid Either constructor index: " ++ show n
 
+instance Memorizable a => Memorizable [a] where
+  memorize = lengthPrefix255 . map memorize
+  recall = recallItems []
+
+instance Memorizable a => Memorizable (NE.NonEmpty a) where
+  memorize = lengthPrefix255 . map memorize . NE.toList
+  recall bs =
+    case NE.nonEmpty $ recallItems [] bs of
+      Just ne -> ne
+      Nothing -> error "Tried to recall an empty list into a NonEmpty"
+
+recallItems :: Memorizable a => [a] -> BS.ByteString -> [a]
+recallItems items bs
+  | bs == BS.empty = items
+  | otherwise      = recallItems (items ++ [recall currSection]) rest
+      where
+        lengthOfCurrentElem = fromIntegral $ BS.head bs
+        (currSection, rest) = BS.splitAt (lengthOfCurrentElem) $ BS.tail bs
