@@ -1,6 +1,6 @@
 version: '3'
 services:
-  dev:
+  kioku:
     image: flipstone/stack:v2-1.9.3
     volumes:
       - .:/kioku

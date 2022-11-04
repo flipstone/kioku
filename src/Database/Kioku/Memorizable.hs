@@ -21,7 +21,6 @@ module Database.Kioku.Memorizable
 
   , memorizeText, recallText
   , memorizeNonEmptyText, recallNonEmptyText
-  , memorizeEnum, recallEnum
 
   , roll
   , unroll
@@ -195,14 +194,6 @@ memorizeFloat = memorizeWord32 . floatToWord
 {-# INLINE recallFloat #-}
 recallFloat :: BS.ByteString -> Float
 recallFloat = wordToFloat . recallWord32
-
-{-# INLINE memorizeEnum #-}
-memorizeEnum :: Enum a => a -> BS.ByteString
-memorizeEnum = memorizeInteger . fromIntegral . fromEnum
-
-{-# INLINE recallEnum #-}
-recallEnum :: Enum a => BS.ByteString -> a
-recallEnum = toEnum . fromIntegral . recallInteger
 
 memorizeInteger :: Integer -> BS.ByteString
 memorizeInteger n = {-# SCC memorizeInteger #-}

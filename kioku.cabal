@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.1.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0786dc62f935374d9f1d1eef2e4feb0fa75846c3f91e2c1c3ff06e14896b2847
+-- hash: d4347457569a89f2ff6bc6597eb7a9855f868a26721ce3f5236f326e6fd0691e
 
 name:           kioku
 version:        0.1.2.3
@@ -32,7 +32,8 @@ library
       Paths_kioku
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings
+  default-extensions:
+      OverloadedStrings
   ghc-options: -Wall -fprof-auto -Werror
   build-depends:
       base >=4.8
@@ -57,7 +58,8 @@ executable kioku-benchmarks
   main-is: benchmarks/Main.hs
   other-modules:
       Paths_kioku
-  default-extensions: OverloadedStrings
+  default-extensions:
+      OverloadedStrings
   ghc-options: -Wall -fprof-auto -Werror -O3 -rtsopts
   build-depends:
       base >=4.8
@@ -72,7 +74,9 @@ executable kioku-example
   main-is: example/Main.hs
   other-modules:
       Paths_kioku
-  default-extensions: OverloadedStrings RecordWildCards
+  default-extensions:
+      OverloadedStrings
+      RecordWildCards
   ghc-options: -Wall -fprof-auto -Werror -O3
   build-depends:
       base >=4.8
@@ -89,7 +93,8 @@ test-suite kioku-test
       Paths_kioku
   hs-source-dirs:
       test
-  default-extensions: OverloadedStrings
+  default-extensions:
+      OverloadedStrings
   ghc-options: -Wall -fprof-auto -Werror -O3
   build-depends:
       base >=4.8
