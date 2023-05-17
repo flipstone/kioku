@@ -37,14 +37,3 @@ jobs:
           mkdir -p ./stack-root
           mv docker-compose.override.github.yml docker-compose.override.yml
           ./scripts/build
-
-      - name: Build notification
-        uses: 8398a7/action-slack@v3
-        if: always()
-        id: slack-notification
-        with:
-          job_name: Build kiouku
-          status: ${{ job.status }}
-          fields: repo,message,commit,author,job,took,pullRequest
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.EXFRESSO_SLACK_WEBHOOK_URL }}

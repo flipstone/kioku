@@ -3,7 +3,7 @@ services:
   kioku:
     image: flipstone/stack:v7-2.9.3
     environment:
-      IN_DEV_CONTAINER: true
+      IN_DEV_CONTAINER: 'true'
       LANG: C.UTF-8
     volumes:
       - .:/kioku
