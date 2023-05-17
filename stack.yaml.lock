@@ -13,7 +13,7 @@ packages:
     hackage: non-empty-text-0.2.0
 snapshots:
 - completed:
-    sha256: 401a0e813162ba62f04517f60c7d25e93a0f867f94a902421ebf07d1fb5a8c46
-    size: 650044
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/21.yaml
-  original: lts-20.21
+    sha256: adbc602422dde10cc330175da7de8609e70afc41449a7e2d6e8b1827aa0e5008
+    size: 649342
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/11.yaml
+  original: lts-20.11
