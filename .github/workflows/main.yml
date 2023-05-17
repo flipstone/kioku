@@ -1,0 +1,50 @@
+name: Build and Test
+
+on:
+  push:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: [self-hosted, linux]
+    permissions:
+      packages: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Cache
+        uses: actions/cache@v3
+        env:
+          cache-version: v3
+        with:
+          key: ${{ env.cache-version }}-${{ hashFiles('stack*.yaml') }}-${{ hashFiles('package.yaml') }}
+          restore-keys: |
+            ${{ env.cache-version }}-
+          path: |
+            ./stack-root
+
+      - name: Build and test
+        run: |
+          set -e
+          mkdir -p ./stack-root
+          mv docker-compose.override.github.yml docker-compose.override.yml
+          ./scripts/build
+
+      - name: Build notification
+        uses: 8398a7/action-slack@v3
+        if: always()
+        id: slack-notification
+        with:
+          job_name: Build kiouku
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,job,took,pullRequest
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.EXFRESSO_SLACK_WEBHOOK_URL }}

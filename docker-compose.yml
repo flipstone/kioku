@@ -1,7 +1,15 @@
 version: '3'
 services:
   kioku:
-    image: flipstone/stack:v2-1.9.3
+    image: flipstone/stack:v7-2.9.3
+    environment:
+      IN_DEV_CONTAINER: true
+      LANG: C.UTF-8
     volumes:
       - .:/kioku
+      - exfresso_stack_root:/stack-root
     working_dir: /kioku
+
+volumes:
+  exfresso_stack_root:
+    external: true
