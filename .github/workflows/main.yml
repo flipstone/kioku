@@ -10,7 +10,6 @@ defaults:
 jobs:
   build:
     name: Build and Test
-    runs-on: [self-hosted, linux]
     permissions:
       packages: write
       contents: read
