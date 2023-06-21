@@ -10,7 +10,7 @@ defaults:
 jobs:
   build:
     name: Build and Test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     permissions:
       packages: write
       contents: read
