@@ -1,25 +1,25 @@
 module Database.Kioku.Internal.KiokuDB where
 
-import            Control.Exception
-import qualified  Data.ByteString.Char8 as BS
-import            Data.Typeable
-import            System.Directory
-import            System.FilePath
+import Control.Exception
+import qualified Data.ByteString.Char8 as BS
+import Data.Typeable
+import System.Directory
+import System.FilePath
 
-import            Database.Kioku.Internal.Buffer
-import            Database.Kioku.Internal.BufferMap
+import Database.Kioku.Internal.Buffer
+import Database.Kioku.Internal.BufferMap
 
-data KiokuDB = KiokuDB {
-    rootDir :: FilePath
-  , bufferMap :: BufferMap
-  }
+data KiokuDB = KiokuDB
+    { rootDir :: FilePath
+    , bufferMap :: BufferMap
+    }
 
 newtype KiokuException = KiokuException String
-  deriving (Show, Typeable)
+    deriving (Show, Typeable)
 
 instance Exception KiokuException
 
-dataPath,tmpPath,objPath,dataSetObjPath,indexObjPath,schemaObjPath :: FilePath
+dataPath, tmpPath, objPath, dataSetObjPath, indexObjPath, schemaObjPath :: FilePath
 dataPath = "data"
 tmpPath = "tmp"
 objPath = "objects"
@@ -60,75 +60,77 @@ type SchemaName = String
 
 writeDBFile :: FilePath -> BS.ByteString -> IO ()
 writeDBFile path bytes = do
-  createDirectoryIfMissing True (takeDirectory path)
-  BS.writeFile path bytes
+    createDirectoryIfMissing True (takeDirectory path)
+    BS.writeFile path bytes
 
-data DataSetFile = DataSetFile {
-    dataSetHash :: BS.ByteString
-  }
+data DataSetFile = DataSetFile
+    { dataSetHash :: BS.ByteString
+    }
 
 readDataSetFile :: DataSetName -> KiokuDB -> IO DataSetFile
 readDataSetFile name db =
-  DataSetFile <$> (BS.readFile $ dataSetObjFile db name)
+    DataSetFile <$> (BS.readFile $ dataSetObjFile db name)
 
 writeDataSetFile :: DataSetName -> DataSetFile -> KiokuDB -> IO ()
 writeDataSetFile name file db = do
-  writeDBFile (dataSetObjFile db name) (dataSetHash file)
+    writeDBFile (dataSetObjFile db name) (dataSetHash file)
 
-data IndexFile = IndexFile {
-    indexHash :: BS.ByteString
-  , dataHash :: BS.ByteString
-  }
+data IndexFile = IndexFile
+    { indexHash :: BS.ByteString
+    , dataHash :: BS.ByteString
+    }
 
 throwErrors :: IO (Either KiokuException a) -> IO a
 throwErrors action = action >>= either throwIO pure
 
 readIndexFile :: IndexName -> KiokuDB -> IO (Either KiokuException IndexFile)
 readIndexFile name db = do
-  indexBytes <- BS.readFile (indexObjFile db name)
+    indexBytes <- BS.readFile (indexObjFile db name)
 
-  pure $
-    case BS.lines indexBytes of
-    [idx, dat] -> pure $ IndexFile idx dat
-    _ -> Left $ KiokuException $ "Index " ++ show name ++ " is corrupt!"
+    pure $
+        case BS.lines indexBytes of
+            [idx, dat] -> pure $ IndexFile idx dat
+            _ -> Left $ KiokuException $ "Index " ++ show name ++ " is corrupt!"
 
 writeIndexFile :: IndexName -> IndexFile -> KiokuDB -> IO ()
 writeIndexFile name file db =
-  writeDBFile (indexObjFile db name)
-              (BS.unlines [indexHash file, dataHash file])
+    writeDBFile
+        (indexObjFile db name)
+        (BS.unlines [indexHash file, dataHash file])
 
-data SchemaIndex = SchemaIndex {
-    indexName :: IndexName
-  , indexContent :: IndexFile
-  }
+data SchemaIndex = SchemaIndex
+    { indexName :: IndexName
+    , indexContent :: IndexFile
+    }
 
-data SchemaFile = SchemaFile {
-    schemaIndexes :: [SchemaIndex]
-  }
+data SchemaFile = SchemaFile
+    { schemaIndexes :: [SchemaIndex]
+    }
 
 writeSchemaFile :: SchemaName -> SchemaFile -> KiokuDB -> IO ()
 writeSchemaFile name file db = do
     writeDBFile (schemaObjFile db name) schemaData
   where
     schemaData = BS.unlines $ map indexLine $ schemaIndexes file
-    indexLine idx = BS.unwords [ BS.pack $ indexName idx
-                               , indexHash $ indexContent idx
-                               , dataHash $ indexContent idx
-                               ]
+    indexLine idx =
+        BS.unwords
+            [ BS.pack $ indexName idx
+            , indexHash $ indexContent idx
+            , dataHash $ indexContent idx
+            ]
 
 readSchemaFile :: SchemaName -> KiokuDB -> IO (Either KiokuException SchemaFile)
 readSchemaFile name db = do
-  schemaBytes <- BS.readFile $ schemaObjFile db name
+    schemaBytes <- BS.readFile $ schemaObjFile db name
 
-  let indexLines = BS.lines schemaBytes
-      parseIndex line = case BS.words line of
-                        [idxName, idx, dat] -> pure $ SchemaIndex (BS.unpack idxName) (IndexFile idx dat)
-                        _ -> Left $ KiokuException $ "Schema " ++ show name ++ " is corrupt!"
+    let indexLines = BS.lines schemaBytes
+        parseIndex line = case BS.words line of
+            [idxName, idx, dat] -> pure $ SchemaIndex (BS.unpack idxName) (IndexFile idx dat)
+            _ -> Left $ KiokuException $ "Schema " ++ show name ++ " is corrupt!"
 
-      indexes = traverse parseIndex indexLines
+        indexes = traverse parseIndex indexLines
 
-  pure $ fmap SchemaFile indexes
+    pure $ fmap SchemaFile indexes
 
 openDataBuffer :: BS.ByteString -> KiokuDB -> IO Buffer
 openDataBuffer bufName db = openBuffer (dataFilePath db bufName) (bufferMap db)
-

@@ -2,6 +2,5 @@
 
 set -e
 
-source scripts/lib/run-in-container.sh
-
-stack build --fast --test "$@"
+./scripts/format-repo
+./scripts/build-lib "$@"

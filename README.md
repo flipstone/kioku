@@ -1,3 +1,2 @@
 ## Default Branch Build Status
-[![CirclCI](https://circleci.com/gh/flipstone/kioku.svg?style=svg)](https://circleci.com/gh/flipstone/kioku)
-
+![Github Actions Build](https://github.com/flipstone/kioku/actions/workflows/main.yml/badge.svg?branch=main)

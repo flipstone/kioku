@@ -11,10 +11,6 @@ jobs:
   build:
     name: Build and Test
     runs-on: [self-hosted, linux, x64]
-    permissions:
-      packages: write
-      contents: read
-      actions: read
 
     steps:
       - name: Checkout
@@ -35,5 +31,6 @@ jobs:
         run: |
           set -e
           mkdir -p ./stack-root
+          echo "PROJECT_DIR=$PWD" >> .env
           mv docker-compose.override.github.yml docker-compose.override.yml
           ./scripts/build

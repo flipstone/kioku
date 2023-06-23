@@ -1,0 +1,5 @@
+#!/bin/bash
+
+exec docker-compose \
+  run --rm -T \
+  kioku haskell-language-server-wrapper "$@"
