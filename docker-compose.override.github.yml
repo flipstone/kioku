@@ -4,7 +4,3 @@ services:
       STACK_ROOT: /stack-root
     volumes:
       - ./stack-root:/stack-root
-
-volumes:
-  exfresso_stack_root:
-    external: false
