@@ -6,3 +6,4 @@ example/data
 .DS_Store
 docker-compose.override.yml
 .stack-work
+.env
