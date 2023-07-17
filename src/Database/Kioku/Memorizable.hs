@@ -124,9 +124,9 @@ recallWord32 bs =
     ( fromIntegral (bs `UBS.unsafeIndex` 0)
         `unsafeShiftL` 24
         .|. fromIntegral (bs `UBS.unsafeIndex` 1)
-        `unsafeShiftL` 16
+            `unsafeShiftL` 16
         .|. fromIntegral (bs `UBS.unsafeIndex` 2)
-        `unsafeShiftL` 8
+            `unsafeShiftL` 8
         .|. fromIntegral (bs `UBS.unsafeIndex` 3)
     )
 
@@ -150,17 +150,17 @@ recallWord64 bs =
     ( fromIntegral (bs `UBS.unsafeIndex` 0)
         `unsafeShiftL` 56
         .|. fromIntegral (bs `UBS.unsafeIndex` 1)
-        `unsafeShiftL` 48
+            `unsafeShiftL` 48
         .|. fromIntegral (bs `UBS.unsafeIndex` 2)
-        `unsafeShiftL` 40
+            `unsafeShiftL` 40
         .|. fromIntegral (bs `UBS.unsafeIndex` 3)
-        `unsafeShiftL` 32
+            `unsafeShiftL` 32
         .|. fromIntegral (bs `UBS.unsafeIndex` 4)
-        `unsafeShiftL` 24
+            `unsafeShiftL` 24
         .|. fromIntegral (bs `UBS.unsafeIndex` 5)
-        `unsafeShiftL` 16
+            `unsafeShiftL` 16
         .|. fromIntegral (bs `UBS.unsafeIndex` 6)
-        `unsafeShiftL` 8
+            `unsafeShiftL` 8
         .|. fromIntegral (bs `UBS.unsafeIndex` 7)
     )
 
@@ -319,7 +319,7 @@ lengthPrefix memorizeLength =
             : addPrefixes rest
 
 {-# INLINE field #-}
-field :: Memorizable v => PrefixedFieldDecoder a a b b v
+field :: (Memorizable v) => PrefixedFieldDecoder a a b b v
 field recallLength lengthWidth cont f bs =
     let !len = recallLength bs
         !start = BS.drop lengthWidth bs
@@ -439,7 +439,7 @@ instance Memorizable Float where
     memorize = memorizeFloat
     recall = recallFloat
 
-instance Memorizable a => Memorizable (Maybe a) where
+instance (Memorizable a) => Memorizable (Maybe a) where
     memorize Nothing = BS.singleton 0
     memorize (Just a) = BS.cons 1 (memorize a)
 
@@ -459,18 +459,18 @@ instance (Memorizable a, Memorizable b) => Memorizable (Either a b) where
             1 -> Right $ recall $ BS.drop 1 bs
             n -> error $ "recall: Invalid Either constructor index: " ++ show n
 
-instance Memorizable a => Memorizable [a] where
+instance (Memorizable a) => Memorizable [a] where
     memorize = lengthPrefix255 . map memorize
     recall = recallItems []
 
-instance Memorizable a => Memorizable (NE.NonEmpty a) where
+instance (Memorizable a) => Memorizable (NE.NonEmpty a) where
     memorize = lengthPrefix255 . map memorize . NE.toList
     recall bs =
         case NE.nonEmpty $ recallItems [] bs of
             Just ne -> ne
             Nothing -> error "Tried to recall an empty list into a NonEmpty"
 
-recallItems :: Memorizable a => [a] -> BS.ByteString -> [a]
+recallItems :: (Memorizable a) => [a] -> BS.ByteString -> [a]
 recallItems items bs
     | bs == BS.empty = items
     | otherwise = recallItems (items ++ [recall currSection]) rest

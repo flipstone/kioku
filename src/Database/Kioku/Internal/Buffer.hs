@@ -24,12 +24,12 @@ newBuffer ptr size = Buffer <$> UBS.unsafePackCStringLen (castPtr ptr, size)
 -- This function does not using a length header to determine where
 -- to stop reading, so it can only be used with Memorizable instances
 -- that do not depend end of the ByteString for parsing
-readBufAt :: Memorizable a => Buffer -> Int -> a
+readBufAt :: (Memorizable a) => Buffer -> Int -> a
 readBufAt (Buffer bytes) off =
     let readBytes = BS.drop off bytes
      in recall readBytes
 
-readRowAt :: Memorizable a => Buffer -> Int -> a
+readRowAt :: (Memorizable a) => Buffer -> Int -> a
 readRowAt (Buffer bytes) off =
     let rowHeader = BS.drop off bytes
         rowLength = recall rowHeader

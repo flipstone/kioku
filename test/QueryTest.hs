@@ -134,7 +134,7 @@ runQueryTest test =
         results <- query "kioku_tests.index" (queryTestQuery test) db
         assertSameData (queryTestExpected test) results
 
-assertSameData :: HasCallStack => [TestData] -> [TestData] -> Assertion
+assertSameData :: (HasCallStack) => [TestData] -> [TestData] -> Assertion
 assertSameData expectedData actualData =
     when (Set.fromList expectedData /= Set.fromList actualData) $
         let msg =

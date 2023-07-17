@@ -190,7 +190,7 @@ unpackKiokuDB gzBytes db = do
         | "/"
             `isPrefixOf` p
             || ".."
-            `isInfixOf` p =
+                `isInfixOf` p =
             throwIO $ KiokuException $ "Insecure file path found in kioku import: " ++ p
         | otherwise = pure ()
 
@@ -289,7 +289,7 @@ createSchema name indexNames db = do
     indexes <- traverse readSchemaIndex indexNames
     writeSchemaFile name (SchemaFile indexes) db
 
-createDataSet :: Memorizable a => DataSetName -> [a] -> KiokuDB -> IO Int
+createDataSet :: (Memorizable a) => DataSetName -> [a] -> KiokuDB -> IO Int
 createDataSet name as db = do
     (tmpFile, h) <- openTempFile (tmpDir db) name
     count <- hWriteRows as h
@@ -300,7 +300,7 @@ createDataSet name as db = do
     writeDataSetFile name (DataSetFile{dataSetHash = sha}) db
     pure count
 
-hWriteRows :: Memorizable a => [a] -> Handle -> IO Int
+hWriteRows :: (Memorizable a) => [a] -> Handle -> IO Int
 hWriteRows as h = do
     count <- newIORef (0 :: Int)
 
@@ -321,7 +321,7 @@ hWriteRows as h = do
     pure c
 
 createIndex ::
-    Memorizable a =>
+    (Memorizable a) =>
     DataSetName ->
     IndexName ->
     (a -> BS.ByteString) ->
@@ -348,7 +348,7 @@ createIndex dataSetName idxName keyFunc db = do
     writeIndexFile idxName indexFile db
 
 query ::
-    Memorizable a =>
+    (Memorizable a) =>
     IndexName ->
     KiokuQuery ->
     KiokuDB ->

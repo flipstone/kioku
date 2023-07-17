@@ -28,7 +28,7 @@ keyAllHitsAlong :: BS.ByteString -> KiokuQuery
 keyAllHitsAlong path = KQ (trieAllHitsAlong path)
 
 runQuery ::
-    Memorizable a =>
+    (Memorizable a) =>
     KiokuQuery ->
     Buffer ->
     Buffer ->

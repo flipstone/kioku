@@ -32,5 +32,5 @@ jobs:
           set -e
           mkdir -p ./stack-root
           echo "PROJECT_DIR=$PWD" >> .env
-          mv docker-compose.override.github.yml docker-compose.override.yml
+          mv compose.override.github.yml compose.override.yml
           ./scripts/build

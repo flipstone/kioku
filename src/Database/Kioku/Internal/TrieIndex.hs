@@ -270,7 +270,7 @@ trieRootElems results (TI buf arcDrop offset) =
             else results
 
 writeIndex ::
-    Memorizable a =>
+    (Memorizable a) =>
     (a -> BS.ByteString) ->
     Buffer ->
     ((Handle -> IO ()) -> IO b) ->
@@ -284,11 +284,11 @@ writeIndex keyFunc buf runWriter = do
 -- instead of terminate. However, the sortBy method
 -- still requires a parameter of (e -> Int -> Bool)
 -- so we replicate the terminate function here.
-terminate :: S.Lexicographic e => e -> Int -> Bool
+terminate :: (S.Lexicographic e) => e -> Int -> Bool
 terminate e i = i >= S.extent e
 
 buildSortedOffsetArray ::
-    Memorizable a =>
+    (Memorizable a) =>
     (a -> BS.ByteString) ->
     Buffer ->
     Int ->
@@ -320,7 +320,7 @@ collectRowPointers total ndx offset vec buf
     | otherwise = pure ()
 
 writeTrieIndex ::
-    Memorizable a =>
+    (Memorizable a) =>
     (a -> BS.ByteString) ->
     V.IOVector Int ->
     Buffer ->

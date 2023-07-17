@@ -16,7 +16,7 @@ newtype KiokuSchema = KiokuSchema
     { indexes :: M.Map IndexName (Buffer, Buffer)
     }
 
-querySchema :: Memorizable a => IndexName -> KiokuQuery -> KiokuSchema -> [a]
+querySchema :: (Memorizable a) => IndexName -> KiokuQuery -> KiokuSchema -> [a]
 querySchema idxName kQuery schema =
     case M.lookup idxName (indexes schema) of
         Nothing -> error $ "Missing index in Kioku schema: " ++ idxName
