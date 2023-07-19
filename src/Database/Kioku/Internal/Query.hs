@@ -1,11 +1,11 @@
-module Database.Kioku.Internal.Query (
-    KiokuQuery,
-    keyExact,
-    keyExactIn,
-    keyPrefix,
-    keyAllHitsAlong,
-    runQuery,
-) where
+module Database.Kioku.Internal.Query
+  ( KiokuQuery
+  , keyExact
+  , keyExactIn
+  , keyPrefix
+  , keyAllHitsAlong
+  , runQuery
+  ) where
 
 import qualified Data.ByteString.Char8 as BS
 
@@ -28,11 +28,11 @@ keyAllHitsAlong :: BS.ByteString -> KiokuQuery
 keyAllHitsAlong path = KQ (trieAllHitsAlong path)
 
 runQuery ::
-    (Memorizable a) =>
-    KiokuQuery ->
-    Buffer ->
-    Buffer ->
-    [a]
+  Memorizable a =>
+  KiokuQuery ->
+  Buffer ->
+  Buffer ->
+  [a]
 runQuery kQuery indexBuffer dataBuffer =
-    map (readRowAt dataBuffer) $
-        kqFunc kQuery (bufferTrieIndex indexBuffer)
+  map (readRowAt dataBuffer) $
+    kqFunc kQuery (bufferTrieIndex indexBuffer)
