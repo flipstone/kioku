@@ -1,6 +1,6 @@
 services:
   kioku:
-    image: ghcr.io/flipstone/haskell-tools:debian-stable-ghc-9.4.6-2023-08-29-52330cd
+    image: ghcr.io/flipstone/haskell-tools:debian-stable-ghc-9.4.7-2023-10-31-3286ef4
     environment:
       IN_DEV_CONTAINER: 'true'
       STACK_ROOT: /stack-root
