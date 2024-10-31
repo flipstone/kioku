@@ -1,11 +1,10 @@
-resolver: lts-22.22
+resolver: lts-22.39
 system-ghc: true
 install-ghc: false
 
 packages:
 - .
 
-extra-deps:
- - non-empty-text-0.2.0
+extra-deps: []
 
 allow-different-user: true
