@@ -69,6 +69,9 @@ benchmarkData =
   , TestData "1010068"
   ]
 
+benchNamespace :: KiokuNamespace
+benchNamespace = KiokuNamespace "kioku_bench"
+
 benchQueries :: Int -> IO ()
 benchQueries count = do
   let
@@ -80,15 +83,15 @@ benchQueries count = do
       ]
 
   withKiokuDB defaultKiokuPath $ \db -> do
-    void $ createDataSet "kioku_bench" benchmarkData db
-    createIndex "kioku_bench" "kioku_bench.index" testDataKey db
+    void $ createDataSet benchNamespace "kioku_bench" benchmarkData db
+    createIndex benchNamespace "kioku_bench" "kioku_bench.index" testDataKey db
 
     for_ queries $ \(queryName, q) -> do
       putStr $ queryName ++ " (" ++ show count ++ ")"
       start <- getPOSIXTime
 
       _ <- replicateM count $ do
-        results <- query "kioku_bench.index" q db :: IO [TestData]
+        results <- query benchNamespace "kioku_bench.index" q db :: IO [TestData]
         results `deepseq` pure ()
 
       finish <- getPOSIXTime
