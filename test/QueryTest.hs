@@ -29,6 +29,9 @@ testDataKey (TestData bytes) = bytes
 copyTestData :: TestData -> TestData
 copyTestData (TestData bytes) = TestData (BS.copy bytes)
 
+testNamespace :: KiokuNamespace
+testNamespace = KiokuNamespace "test_namespace"
+
 test_queries :: TestTree
 test_queries =
   testGroup
@@ -38,9 +41,9 @@ test_queries =
         query' <- HH.forAll (queryGen dataset)
 
         results <- liftIO . withKiokuDB defaultKiokuPath $ \db -> do
-          void $ createDataSet "kioku_tests" dataset db
-          createIndex "kioku_tests" "kioku_tests.index" testDataKey db
-          mmappedResults <- query "kioku_tests.index" (keyExactIn $ map testDataKey query') db
+          void $ createDataSet testNamespace "kioku_tests" dataset db
+          createIndex testNamespace "kioku_tests" "kioku_tests.index" testDataKey db
+          mmappedResults <- query testNamespace "kioku_tests.index" (keyExactIn $ map testDataKey query') db
 
           let
             copiedResults = copyTestData <$> mmappedResults
@@ -131,9 +134,9 @@ data QueryTest = QueryTest
 runQueryTest :: QueryTest -> IO ()
 runQueryTest test =
   withKiokuDB defaultKiokuPath $ \db -> do
-    void $ createDataSet "kioku_tests" (queryTestData test) db
-    createIndex "kioku_tests" "kioku_tests.index" testDataKey db
-    results <- query "kioku_tests.index" (queryTestQuery test) db
+    void $ createDataSet testNamespace "kioku_tests" (queryTestData test) db
+    createIndex testNamespace "kioku_tests" "kioku_tests.index" testDataKey db
+    results <- query testNamespace "kioku_tests.index" (queryTestQuery test) db
     assertSameData (queryTestExpected test) results
 
 assertSameData :: HasCallStack => [TestData] -> [TestData] -> Assertion

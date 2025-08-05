@@ -20,15 +20,15 @@ main = do
 
         count <- do
           cities <- loadCities "example/data/cities.txt.gz"
-          createDataSet "cities" cities db
+          createDataSet exampleNamespace "cities" cities db
 
         putStrLn $ "Done... loaded " ++ show count ++ " cities"
       ("cities" : "index" : _) -> do
         putStrLn $ "Indexing cities by name."
-        createIndex "cities" "cities.name" cityName db
+        createIndex exampleNamespace "cities" "cities.name" cityName db
         putStrLn $ "Done... "
       ("cities" : "query" : name : _) -> do
-        cities <- query "cities.name" (keyPrefix $ CBS.pack name) db
+        cities <- query exampleNamespace "cities.name" (keyPrefix $ CBS.pack name) db
         printCities cities
       _ -> do
         putStrLn $ "Unknown command: " ++ unwords args
@@ -43,6 +43,9 @@ printCities cities =
     CBS.putStr $ ","
     CBS.putStr $ cityLng city
     CBS.putStrLn $ ")"
+
+exampleNamespace :: KiokuNamespace
+exampleNamespace = KiokuNamespace "example"
 
 data City = City
   { cityName :: BS.ByteString

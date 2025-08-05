@@ -2,6 +2,7 @@ module Database.Kioku.Internal.KiokuDB where
 
 import Control.Exception
 import qualified Data.ByteString.Char8 as BS
+import Data.Foldable
 import Data.Typeable
 import System.Directory
 import System.FilePath
@@ -14,18 +15,33 @@ data KiokuDB = KiokuDB
   , bufferMap :: BufferMap
   }
 
+newtype KiokuNamespace = KiokuNamespace String
+
 newtype KiokuException = KiokuException String
   deriving (Show, Typeable)
 
 instance Exception KiokuException
 
-dataPath, tmpPath, objPath, dataSetObjPath, indexObjPath, schemaObjPath :: FilePath
+dataPath :: FilePath
 dataPath = "data"
+
+tmpPath :: FilePath
 tmpPath = "tmp"
+
+objPath :: FilePath
 objPath = "objects"
-dataSetObjPath = objPath </> "data_set"
-indexObjPath = objPath </> "index"
-schemaObjPath = objPath </> "schema"
+
+namespaceObjPath :: KiokuNamespace -> FilePath
+namespaceObjPath (KiokuNamespace namespace) = objPath </> namespace
+
+dataSetObjPath :: KiokuNamespace -> FilePath
+dataSetObjPath namespace = namespaceObjPath namespace </> "data_set"
+
+indexObjPath :: KiokuNamespace -> FilePath
+indexObjPath namespace = namespaceObjPath namespace </> "index"
+
+schemaObjPath :: KiokuNamespace -> FilePath
+schemaObjPath namespace = namespaceObjPath namespace </> "schema"
 
 dataDir :: KiokuDB -> FilePath
 dataDir db = rootDir db </> dataPath
@@ -33,23 +49,26 @@ dataDir db = rootDir db </> dataPath
 tmpDir :: KiokuDB -> FilePath
 tmpDir db = rootDir db </> tmpPath
 
-dataSetObjDir :: KiokuDB -> FilePath
-dataSetObjDir db = rootDir db </> dataSetObjPath
+objDir :: KiokuDB -> FilePath
+objDir db = rootDir db </> objPath
 
-indexObjDir :: KiokuDB -> FilePath
-indexObjDir db = rootDir db </> indexObjPath
+dataSetObjDir :: KiokuDB -> KiokuNamespace -> FilePath
+dataSetObjDir db namespace = rootDir db </> dataSetObjPath namespace
 
-schemaObjDir :: KiokuDB -> FilePath
-schemaObjDir db = rootDir db </> schemaObjPath
+indexObjDir :: KiokuDB -> KiokuNamespace -> FilePath
+indexObjDir db namespace = rootDir db </> indexObjPath namespace
 
-dataSetObjFile :: KiokuDB -> DataSetName -> FilePath
-dataSetObjFile db name = dataSetObjDir db </> name
+schemaObjDir :: KiokuDB -> KiokuNamespace -> FilePath
+schemaObjDir db namespace = rootDir db </> schemaObjPath namespace
 
-indexObjFile :: KiokuDB -> IndexName -> FilePath
-indexObjFile db name = indexObjDir db </> name
+dataSetObjFile :: KiokuDB -> KiokuNamespace -> DataSetName -> FilePath
+dataSetObjFile db namespace name = dataSetObjDir db namespace </> name
 
-schemaObjFile :: KiokuDB -> SchemaName -> FilePath
-schemaObjFile db name = schemaObjDir db </> name
+indexObjFile :: KiokuDB -> KiokuNamespace -> IndexName -> FilePath
+indexObjFile db namespace name = indexObjDir db namespace </> name
+
+schemaObjFile :: KiokuDB -> KiokuNamespace -> SchemaName -> FilePath
+schemaObjFile db namespace name = schemaObjDir db namespace </> name
 
 dataFilePath :: KiokuDB -> BS.ByteString -> FilePath
 dataFilePath db sha = dataDir db </> BS.unpack sha
@@ -58,8 +77,17 @@ type DataSetName = String
 type IndexName = String
 type SchemaName = String
 
-writeDBFile :: FilePath -> BS.ByteString -> IO ()
-writeDBFile path bytes = do
+writeDBFile :: KiokuDB -> KiokuNamespace -> FilePath -> BS.ByteString -> IO ()
+writeDBFile db namespace path bytes = do
+  -- In order to avoid sparse namespace directories, we create the data set, index, and schema directories
+  -- for each namespace at write if they don't exist.
+  traverse_
+    (createDirectoryIfMissing True)
+    [ dataSetObjDir db namespace
+    , indexObjDir db namespace
+    , schemaObjDir db namespace
+    ]
+
   createDirectoryIfMissing True (takeDirectory path)
   BS.writeFile path bytes
 
@@ -67,13 +95,13 @@ data DataSetFile = DataSetFile
   { dataSetHash :: BS.ByteString
   }
 
-readDataSetFile :: DataSetName -> KiokuDB -> IO DataSetFile
-readDataSetFile name db =
-  DataSetFile <$> (BS.readFile $ dataSetObjFile db name)
+readDataSetFile :: KiokuNamespace -> DataSetName -> KiokuDB -> IO DataSetFile
+readDataSetFile namespace name db =
+  DataSetFile <$> (BS.readFile $ dataSetObjFile db namespace name)
 
-writeDataSetFile :: DataSetName -> DataSetFile -> KiokuDB -> IO ()
-writeDataSetFile name file db = do
-  writeDBFile (dataSetObjFile db name) (dataSetHash file)
+writeDataSetFile :: KiokuNamespace -> DataSetName -> DataSetFile -> KiokuDB -> IO ()
+writeDataSetFile namespace name file db = do
+  writeDBFile db namespace (dataSetObjFile db namespace name) (dataSetHash file)
 
 data IndexFile = IndexFile
   { indexHash :: BS.ByteString
@@ -83,19 +111,21 @@ data IndexFile = IndexFile
 throwErrors :: IO (Either KiokuException a) -> IO a
 throwErrors action = action >>= either throwIO pure
 
-readIndexFile :: IndexName -> KiokuDB -> IO (Either KiokuException IndexFile)
-readIndexFile name db = do
-  indexBytes <- BS.readFile (indexObjFile db name)
+readIndexFile :: KiokuNamespace -> IndexName -> KiokuDB -> IO (Either KiokuException IndexFile)
+readIndexFile namespace name db = do
+  indexBytes <- BS.readFile (indexObjFile db namespace name)
 
   pure $
     case BS.lines indexBytes of
       [idx, dat] -> pure $ IndexFile idx dat
       _ -> Left $ KiokuException $ "Index " ++ show name ++ " is corrupt!"
 
-writeIndexFile :: IndexName -> IndexFile -> KiokuDB -> IO ()
-writeIndexFile name file db =
+writeIndexFile :: KiokuNamespace -> IndexName -> IndexFile -> KiokuDB -> IO ()
+writeIndexFile namespace name file db =
   writeDBFile
-    (indexObjFile db name)
+    db
+    namespace
+    (indexObjFile db namespace name)
     (BS.unlines [indexHash file, dataHash file])
 
 data SchemaIndex = SchemaIndex
@@ -107,9 +137,9 @@ data SchemaFile = SchemaFile
   { schemaIndexes :: [SchemaIndex]
   }
 
-writeSchemaFile :: SchemaName -> SchemaFile -> KiokuDB -> IO ()
-writeSchemaFile name file db = do
-  writeDBFile (schemaObjFile db name) schemaData
+writeSchemaFile :: KiokuNamespace -> SchemaName -> SchemaFile -> KiokuDB -> IO ()
+writeSchemaFile namespace name file db = do
+  writeDBFile db namespace (schemaObjFile db namespace name) schemaData
  where
   schemaData = BS.unlines $ map indexLine $ schemaIndexes file
   indexLine idx =
@@ -119,9 +149,9 @@ writeSchemaFile name file db = do
       , dataHash $ indexContent idx
       ]
 
-readSchemaFile :: SchemaName -> KiokuDB -> IO (Either KiokuException SchemaFile)
-readSchemaFile name db = do
-  schemaBytes <- BS.readFile $ schemaObjFile db name
+readSchemaFile :: KiokuNamespace -> SchemaName -> KiokuDB -> IO (Either KiokuException SchemaFile)
+readSchemaFile namespace name db = do
+  schemaBytes <- BS.readFile $ schemaObjFile db namespace name
 
   let
     indexLines = BS.lines schemaBytes

@@ -22,9 +22,9 @@ querySchema idxName kQuery schema =
     Nothing -> error $ "Missing index in Kioku schema: " ++ idxName
     Just (indexBuf, dataBuf) -> runQuery kQuery indexBuf dataBuf
 
-openSchema :: SchemaName -> KiokuDB -> IO KiokuSchema
-openSchema name db = do
-  schemaFile <- throwErrors $ readSchemaFile name db
+openSchema :: KiokuNamespace -> SchemaName -> KiokuDB -> IO KiokuSchema
+openSchema namespace name db = do
+  schemaFile <- throwErrors $ readSchemaFile namespace name db
 
   buffers <- for (schemaIndexes schemaFile) $ \schemaIndex -> do
     let
