@@ -15,7 +15,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as CBS
 import Data.Foldable
 import Data.Function
-import Data.List
+import Data.List (nub, sortBy)
 #if MIN_VERSION_base(4,11,0)
 #else
 import            Data.Monoid ((<>))
@@ -328,7 +328,7 @@ buildSortedOffsetArray keyFunc buf rowCount = do
 collectRowPointers :: Int -> Int -> Int -> V.IOVector Int -> Buffer -> IO ()
 collectRowPointers total ndx offset vec buf
   | ndx < total =
-      {-# SCC collectRowPointers #-}
+      {-# SCC "collectRowPointers" #-}
       do
         V.write vec ndx offset
         let
