@@ -94,7 +94,7 @@ recallNonEmptyText = Maybe.fromJust . NET.fromText . E.decodeUtf8
 
 memorizeWord16 :: Word16 -> BS.ByteString
 memorizeWord16 n =
-  {-# SCC memorizeWord16 #-}
+  {-# SCC "memorizeWord16" #-}
   BS.pack
     [ fromIntegral (n `unsafeShiftR` 8)
     , fromIntegral n
@@ -102,7 +102,7 @@ memorizeWord16 n =
 
 recallWord16 :: BS.ByteString -> Word16
 recallWord16 bs =
-  {-# SCC recallWord16 #-}
+  {-# SCC "recallWord16" #-}
   ( fromIntegral (bs `UBS.unsafeIndex` 0)
       `unsafeShiftL` 8
       .|. fromIntegral (bs `UBS.unsafeIndex` 1)
@@ -110,7 +110,7 @@ recallWord16 bs =
 
 memorizeWord32 :: Word32 -> BS.ByteString
 memorizeWord32 n =
-  {-# SCC memorizeWord32 #-}
+  {-# SCC "memorizeWord32" #-}
   BS.pack
     [ fromIntegral (n `unsafeShiftR` 24)
     , fromIntegral (n `unsafeShiftR` 16)
@@ -120,7 +120,7 @@ memorizeWord32 n =
 
 recallWord32 :: BS.ByteString -> Word32
 recallWord32 bs =
-  {-# SCC recallWord32 #-}
+  {-# SCC "recallWord32" #-}
   ( fromIntegral (bs `UBS.unsafeIndex` 0)
       `unsafeShiftL` 24
       .|. fromIntegral (bs `UBS.unsafeIndex` 1)
@@ -132,7 +132,7 @@ recallWord32 bs =
 
 memorizeWord64 :: Word64 -> BS.ByteString
 memorizeWord64 n =
-  {-# SCC memorizeWord64 #-}
+  {-# SCC "memorizeWord64" #-}
   BS.pack
     [ fromIntegral (n `unsafeShiftR` 56)
     , fromIntegral (n `unsafeShiftR` 48)
@@ -146,7 +146,7 @@ memorizeWord64 n =
 
 recallWord64 :: BS.ByteString -> Word64
 recallWord64 bs =
-  {-# SCC recallWord64 #-}
+  {-# SCC "recallWord64" #-}
   ( fromIntegral (bs `UBS.unsafeIndex` 0)
       `unsafeShiftL` 56
       .|. fromIntegral (bs `UBS.unsafeIndex` 1)
@@ -230,7 +230,7 @@ recallFloat = wordToFloat . recallWord32
 
 memorizeInteger :: Integer -> BS.ByteString
 memorizeInteger n =
-  {-# SCC memorizeInteger #-}
+  {-# SCC "memorizeInteger" #-}
   if len < fromIntegral maxWord8
     then BS.pack ((fromIntegral len) : sign : bytes)
     else
@@ -250,7 +250,7 @@ memorizeInteger n =
 
 recallInteger :: BS.ByteString -> Integer
 recallInteger bs =
-  {-# SCC recallInteger #-}
+  {-# SCC "recallInteger" #-}
   case BS.head bs of
     255 ->
       let

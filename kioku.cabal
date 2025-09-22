@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1b9602ec29636894a899bc9f4ded20ce9665a2c15f50342c869d4457f761ecfc
+-- hash: 9e6de9023a7cfc2136bc5809ae3bd7422b1e43ac7a08540d6d061ff75301ad86
 
 name:           kioku
-version:        0.1.3.1
+version:        0.1.3.2
 synopsis:       A library for indexing and querying static datasets on disk
 category:       Database
 homepage:       http://github.com/flipstone/kioku
@@ -34,7 +34,7 @@ library
       src
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -fprof-auto -Werror
+  ghc-options: -Wall -Wcompat -fprof-auto -Werror
   build-depends:
       base >=4.8
     , base16-bytestring
@@ -53,6 +53,8 @@ library
     , vector-algorithms >=0.8.0.1
     , zlib
   default-language: Haskell2010
+  if impl (ghc >= 9.8)
+    ghc-options: -Wterm-variable-capture -Wextended-warnings
 
 executable kioku-benchmarks
   main-is: benchmarks/Main.hs
@@ -60,7 +62,7 @@ executable kioku-benchmarks
       Paths_kioku
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -fprof-auto -Werror -O3 -rtsopts
+  ghc-options: -Wall -Wcompat -fprof-auto -Werror -O3 -rtsopts
   build-depends:
       base >=4.8
     , bytestring
@@ -69,6 +71,8 @@ executable kioku-benchmarks
     , time
     , zlib
   default-language: Haskell2010
+  if impl (ghc >= 9.8)
+    ghc-options: -Wterm-variable-capture -Wextended-warnings
 
 executable kioku-example
   main-is: example/Main.hs
@@ -77,13 +81,15 @@ executable kioku-example
   default-extensions:
       OverloadedStrings
       RecordWildCards
-  ghc-options: -Wall -fprof-auto -Werror -O3
+  ghc-options: -Wall -Wcompat -fprof-auto -Werror -O3
   build-depends:
       base >=4.8
     , bytestring
     , kioku
     , zlib
   default-language: Haskell2010
+  if impl (ghc >= 9.8)
+    ghc-options: -Wterm-variable-capture -Wextended-warnings
 
 test-suite kioku-test
   type: exitcode-stdio-1.0
@@ -95,7 +101,7 @@ test-suite kioku-test
       test
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -fprof-auto -Werror -O3
+  ghc-options: -Wall -Wcompat -fprof-auto -Werror -O3
   build-depends:
       base >=4.8
     , bytestring
@@ -109,3 +115,5 @@ test-suite kioku-test
     , tasty-hunit
     , zlib
   default-language: Haskell2010
+  if impl (ghc >= 9.8)
+    ghc-options: -Wterm-variable-capture -Wextended-warnings
