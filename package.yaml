@@ -11,7 +11,7 @@ default-extensions:
 ghc-options:
 - -Wall
 - -Wcompat
-- -fprof-auto
+- -fprof-late
 - -Werror
 when:
   - condition: impl (ghc >= 9.8)
