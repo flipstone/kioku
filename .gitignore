@@ -5,5 +5,6 @@ cabal.sandbox.config
 example/data
 .DS_Store
 docker-compose.override.yml
+docker-compose.override.yaml
 .stack-work
 .env
