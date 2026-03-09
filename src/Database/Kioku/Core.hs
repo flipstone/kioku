@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeApplications #-}
+
 module Database.Kioku.Core
   ( KiokuDB
   , KiokuQuery
@@ -22,7 +24,9 @@ module Database.Kioku.Core
   ) where
 
 import Control.Exception
-import Crypto.Hash.SHA256
+import Crypto.Hash (hashlazy)
+import Crypto.Hash.Algorithms (SHA256)
+import Data.ByteArray (convert)
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -118,7 +122,7 @@ withKiokuDB path action = do
   action db `finally` closeKiokuDB db
 
 hashFile :: FilePath -> IO BS.ByteString
-hashFile = fmap (Base16.encode . hashlazy) . LBS.readFile
+hashFile = fmap (Base16.encode . convert . hashlazy @SHA256) . LBS.readFile
 
 createSchema :: KiokuNamespace -> SchemaName -> [IndexName] -> KiokuDB -> IO ()
 createSchema namespace name indexNames db = do

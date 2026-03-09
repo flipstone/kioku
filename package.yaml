@@ -33,9 +33,10 @@ library:
   dependencies:
   - base16-bytestring
   - containers
-  - cryptohash
+  - crypton
   - directory
   - filepath
+  - memory
   - mmap
   - non-empty-text
   - vector
