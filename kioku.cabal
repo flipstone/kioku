@@ -32,7 +32,7 @@ library
       src
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -Wcompat -fprof-late -Werror
+  ghc-options: -Wall -Wcompat -fprof-late
   build-depends:
       base >=4.8
     , base16-bytestring
@@ -61,7 +61,7 @@ executable kioku-benchmarks
       Paths_kioku
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -Wcompat -fprof-late -Werror -O3 -rtsopts
+  ghc-options: -Wall -Wcompat -fprof-late -O3 -rtsopts
   build-depends:
       base >=4.8
     , bytestring
@@ -80,7 +80,7 @@ executable kioku-example
   default-extensions:
       OverloadedStrings
       RecordWildCards
-  ghc-options: -Wall -Wcompat -fprof-late -Werror -O3
+  ghc-options: -Wall -Wcompat -fprof-late -O3
   build-depends:
       base >=4.8
     , bytestring
@@ -100,7 +100,7 @@ test-suite kioku-test
       test
   default-extensions:
       OverloadedStrings
-  ghc-options: -Wall -Wcompat -fprof-late -Werror -O3
+  ghc-options: -Wall -Wcompat -fprof-late -O3
   build-depends:
       base >=4.8
     , bytestring

@@ -1,5 +1,8 @@
 resolver: lts-24.12
 
+ghc-options:
+  "$locals": -Werror
+
 packages:
 - .
 

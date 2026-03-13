@@ -12,7 +12,6 @@ ghc-options:
 - -Wall
 - -Wcompat
 - -fprof-late
-- -Werror
 when:
   - condition: impl (ghc >= 9.8)
     ghc-options:
