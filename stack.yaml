@@ -1,4 +1,4 @@
-resolver: lts-24.12
+resolver: nightly-2026-07-01
 
 ghc-options:
   "$locals": -Werror

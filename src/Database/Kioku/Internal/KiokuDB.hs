@@ -3,7 +3,6 @@ module Database.Kioku.Internal.KiokuDB where
 import Control.Exception
 import qualified Data.ByteString.Char8 as BS
 import Data.Foldable
-import Data.Typeable
 import System.Directory
 import System.FilePath
 
@@ -18,7 +17,7 @@ data KiokuDB = KiokuDB
 newtype KiokuNamespace = KiokuNamespace String
 
 newtype KiokuException = KiokuException String
-  deriving (Show, Typeable)
+  deriving (Show)
 
 instance Exception KiokuException
 
