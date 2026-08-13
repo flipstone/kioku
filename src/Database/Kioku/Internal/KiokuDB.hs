@@ -12,9 +12,10 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Foldable
 import Data.IORef
-import Data.List (nub)
+import Data.List (stripPrefix)
 import qualified Data.Map.Strict as M
 import Data.Maybe (mapMaybe)
+import qualified Data.Set as Set
 import Data.Typeable
 import System.Directory
 import System.FilePath
@@ -103,7 +104,8 @@ storageWrite db path bytes =
       createDirectoryIfMissing True (takeDirectory fullPath)
       BS.writeFile fullPath bytes
     MemoryStorage ref ->
-      modifyIORef' ref (M.insert path bytes)
+      atomicModifyIORef' ref $ \contents ->
+        (M.insert path bytes contents, ())
 
 -- | Lists the names of the immediate children of a relative directory path.
 storageList :: KiokuDB -> FilePath -> IO [FilePath]
@@ -117,12 +119,8 @@ storageList db path =
       let
         prefix = addTrailingPathSeparator path
         childName key = takeWhile (not . isPathSeparator) <$> stripPrefix prefix key
-        stripPrefix pre str =
-          if pre == take (length pre) str
-            then Just (drop (length pre) str)
-            else Nothing
 
-      pure $ nub $ mapMaybe childName $ M.keys contents
+      pure . Set.toList . Set.fromList . mapMaybe childName . M.keys $ contents
 
 -- | Removes a stored object by its relative path within the database.
 storageRemove :: KiokuDB -> FilePath -> IO ()
@@ -131,7 +129,8 @@ storageRemove db path =
     FileStorage root ->
       removeFile (root </> path)
     MemoryStorage ref ->
-      modifyIORef' ref (M.delete path)
+      atomicModifyIORef' ref $ \contents ->
+        (M.delete path contents, ())
 
 {- | Streams content-addressed blob data through the given writer, storing the
 result under its SHA256 hash. Returns the hash and the writer's result. The
@@ -162,7 +161,9 @@ createBlob db name writer =
         lazyBytes = Builder.toLazyByteString builder
         sha = hashBytes lazyBytes
 
-      modifyIORef' ref (M.insert (dataFilePath sha) (LBS.toStrict lazyBytes))
+      atomicModifyIORef' ref $ \contents ->
+        (M.insert (dataFilePath sha) (LBS.toStrict lazyBytes) contents, ())
+
       pure (sha, result)
 
 hashBytes :: LBS.ByteString -> BS.ByteString

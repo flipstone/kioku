@@ -77,3 +77,4 @@ tests:
       - tasty-hunit
       - hedgehog
       - tasty-hedgehog
+      - temporary

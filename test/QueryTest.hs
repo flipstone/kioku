@@ -12,6 +12,7 @@ import qualified Data.Set as Set
 import qualified Hedgehog as HH
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
+import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, HasCallStack, assertFailure, testCase)
 import Test.Tasty.Hedgehog (testProperty)
@@ -39,9 +40,16 @@ data Backend = Backend
   , withBackendDB :: forall a. (KiokuDB -> IO a) -> IO a
   }
 
+-- Each file backend database gets its own temporary directory so that test
+-- runs are isolated from each other and never touch a real Kioku database in
+-- the working directory. The temp directory is removed only after
+-- 'withKiokuDB' has closed the database, so its mmapped buffers are already
+-- unmapped by then.
 backends :: [Backend]
 backends =
-  [ Backend "file backend" (withKiokuDB defaultKiokuPath)
+  [ Backend "file backend" $ \action ->
+      withSystemTempDirectory "kioku-test" $ \dir ->
+        withKiokuDB dir action
   , Backend "memory backend" withInMemoryKiokuDB
   ]
 
