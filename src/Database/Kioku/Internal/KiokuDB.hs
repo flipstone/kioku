@@ -20,6 +20,7 @@ import Data.Typeable
 import System.Directory
 import System.FilePath
 import System.IO
+import System.IO.Error (doesNotExistErrorType, mkIOError)
 
 import Database.Kioku.Internal.Buffer
 import Database.Kioku.Internal.BufferMap
@@ -82,7 +83,10 @@ type DataSetName = String
 type IndexName = String
 type SchemaName = String
 
--- | Reads a stored object by its relative path within the database.
+{- | Reads a stored object by its relative path within the database. A missing
+object raises a 'doesNotExistErrorType' 'IOError' in both backends, so callers
+can handle it the same way regardless of where the bytes live.
+-}
 storageRead :: KiokuDB -> FilePath -> IO BS.ByteString
 storageRead db path =
   case storage db of
@@ -92,7 +96,8 @@ storageRead db path =
       contents <- readIORef ref
       case M.lookup path contents of
         Just bytes -> pure bytes
-        Nothing -> throwIO $ KiokuException $ "Missing kioku object: " ++ path
+        Nothing ->
+          ioError $ mkIOError doesNotExistErrorType "storageRead" Nothing (Just path)
 
 -- | Writes a stored object at its relative path within the database.
 storageWrite :: KiokuDB -> FilePath -> BS.ByteString -> IO ()
@@ -107,7 +112,14 @@ storageWrite db path bytes =
       atomicModifyIORef' ref $ \contents ->
         (M.insert path bytes contents, ())
 
--- | Lists the names of the immediate children of a relative directory path.
+{- | Lists the names of the immediate children of a relative directory path.
+
+The backends diverge for a path that names nothing: memory storage has no
+notion of an empty directory (see 'writeObjFile'), so it simply finds no keys
+under the prefix and returns an empty list, while the file backend throws.
+Nothing in the library relies on this today, since 'openKiokuDB' creates the
+top level directories and 'writeObjFile' creates the per-namespace ones.
+-}
 storageList :: KiokuDB -> FilePath -> IO [FilePath]
 storageList db path =
   case storage db of
@@ -146,12 +158,23 @@ createBlob db name writer =
   case storage db of
     FileStorage root -> do
       (tmpFile, h) <- openTempFile (root </> tmpPath) name
-      result <- writer (BS.hPutStr h)
-      hClose h
 
-      sha <- hashBytes <$> LBS.readFile tmpFile
-      renameFile tmpFile (root </> dataFilePath sha)
-      pure (sha, result)
+      let
+        -- Nothing ever cleans up tmpPath, so a writer that throws must not
+        -- leave the handle open or the temp file behind. removePathForcibly
+        -- tolerates the file already being gone, which is the case when
+        -- renameFile is what threw.
+        cleanup = do
+          hClose h
+          removePathForcibly tmpFile
+
+      flip onException cleanup $ do
+        result <- writer (BS.hPutStr h)
+        hClose h
+
+        sha <- hashBytes <$> LBS.readFile tmpFile
+        renameFile tmpFile (root </> dataFilePath sha)
+        pure (sha, result)
     MemoryStorage ref -> do
       builderRef <- newIORef mempty
       result <- writer (\bs -> modifyIORef' builderRef (<> Builder.byteString bs))

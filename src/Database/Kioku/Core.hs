@@ -61,6 +61,14 @@ openKiokuDB path = do
 {- | Creates a database that lives entirely in memory and never touches the
 filesystem. It holds the same content-addressed representation as an
 on-disk database and supports the same operations.
+
+Note that this backend is more permissive about result lifetimes than a
+file-backed database. Its buffers are ordinary heap 'BS.ByteString's that stay
+valid indefinitely, whereas a file-backed database serves results from mmapped
+regions that 'closeKiokuDB' (and therefore 'gcKiokuDB') unmaps. Code that must
+also work against a file-backed database still has to force or copy query
+results before the database is closed; an in-memory database will not catch a
+failure to do so.
 -}
 newInMemoryKiokuDB :: IO KiokuDB
 newInMemoryKiokuDB = do
@@ -123,6 +131,9 @@ withKiokuDB path action = do
   db <- openKiokuDB path
   action db `finally` closeKiokuDB db
 
+{- | Runs an action against a database that lives entirely in memory. See
+'newInMemoryKiokuDB' for how this backend differs from a file-backed one.
+-}
 withInMemoryKiokuDB :: (KiokuDB -> IO a) -> IO a
 withInMemoryKiokuDB action = do
   db <- newInMemoryKiokuDB
@@ -154,7 +165,7 @@ writeRows sink as = do
     sink header
     sink bytes
 
-    modifyIORef count (+ 1)
+    modifyIORef' count (+ 1)
 
   c <- readIORef count
 

@@ -59,8 +59,11 @@ test_queries =
     "queries"
     (map backendQueryTests backends ++ [backendEquivalenceTest])
 
--- Runs the same randomly generated dataset and query through both storage
--- backends and requires identical results, so the backends cannot drift.
+-- Builds the same randomly generated dataset in every backend, runs the same
+-- query against each, and requires the results to be identical. This pins
+-- query behavior across the backends; it says nothing about whether they store
+-- the same bytes, since each result is produced entirely within its own
+-- backend.
 backendEquivalenceTest :: TestTree
 backendEquivalenceTest =
   testProperty "file and memory backends give identical results" $ HH.property $ do
