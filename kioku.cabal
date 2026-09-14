@@ -1,11 +1,11 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.1.
+-- This file has been generated from package.yaml by hpack version 0.39.1.
 --
 -- see: https://github.com/sol/hpack
 
 name:           kioku
-version:        0.1.5.0
+version:        0.1.6.0
 synopsis:       A library for indexing and querying static datasets on disk
 category:       Database
 homepage:       http://github.com/flipstone/kioku
@@ -112,6 +112,7 @@ test-suite kioku-test
     , tasty-discover
     , tasty-hedgehog
     , tasty-hunit
+    , temporary
     , zlib
   default-language: Haskell2010
   if impl (ghc >= 9.8)

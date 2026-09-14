@@ -23,7 +23,6 @@ import            Data.Monoid ((<>))
 import qualified Data.Proxy as P
 import qualified Data.Vector.Algorithms.AmericanFlag as S
 import qualified Data.Vector.Unboxed.Mutable as V
-import System.IO
 
 import Database.Kioku.Internal.Buffer
 import Database.Kioku.Memorizable
@@ -287,7 +286,7 @@ writeIndex ::
   Memorizable a =>
   (a -> BS.ByteString) ->
   Buffer ->
-  ((Handle -> IO ()) -> IO b) ->
+  (((BS.ByteString -> IO ()) -> IO ()) -> IO b) ->
   IO b
 writeIndex keyFunc buf runWriter = do
   let
@@ -341,11 +340,11 @@ writeTrieIndex ::
   (a -> BS.ByteString) ->
   V.IOVector Int ->
   Buffer ->
-  Handle ->
+  (BS.ByteString -> IO ()) ->
   IO ()
-writeTrieIndex keyFunc vec buf h = do
+writeTrieIndex keyFunc vec buf sink = do
   (rootOffset, totalBytes, _) <- writeTrie "" "" [] [] 0 0
-  BS.hPutStr h $ memorize (totalBytes - rootOffset)
+  sink $ memorize (totalBytes - rootOffset)
  where
   len = V.length vec
 
@@ -484,7 +483,7 @@ writeTrieIndex keyFunc vec buf h = do
 
       byteCount = sum [BS.length bs | bsl <- bytes, bs <- bsl]
 
-    traverse_ (traverse_ $ BS.hPutStr h) bytes
+    traverse_ (traverse_ sink) bytes
 
     pure $ byteCount
 

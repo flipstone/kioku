@@ -2,6 +2,7 @@ module Database.Kioku.Internal.Buffer
   ( Buffer
   , bufLength
   , newBuffer
+  , bufferFromByteString
   , readBufAt
   , readRowAt
   , extractBufRange
@@ -20,6 +21,12 @@ bufLength (Buffer bs) = BS.length bs
 
 newBuffer :: Ptr () -> Int -> IO Buffer
 newBuffer ptr size = Buffer <$> UBS.unsafePackCStringLen (castPtr ptr, size)
+
+{- | Wraps an ordinary heap ByteString as a buffer, for storage backends that
+hold their content in memory rather than in memory-mapped files.
+-}
+bufferFromByteString :: BS.ByteString -> Buffer
+bufferFromByteString = Buffer
 
 -- This function does not using a length header to determine where
 -- to stop reading, so it can only be used with Memorizable instances
