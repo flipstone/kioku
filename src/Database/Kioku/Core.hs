@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeApplications #-}
-
 module Database.Kioku.Core
   ( KiokuDB
   , KiokuQuery
@@ -9,6 +7,8 @@ module Database.Kioku.Core
   , SchemaName
   , KiokuNamespace (..)
   , openKiokuDB
+  , newInMemoryKiokuDB
+  , withInMemoryKiokuDB
   , defaultKiokuPath
   , closeKiokuDB
   , withKiokuDB
@@ -24,18 +24,14 @@ module Database.Kioku.Core
   ) where
 
 import Control.Exception
-import Crypto.Hash (hashlazy)
-import Crypto.Hash.Algorithms (SHA256)
-import Data.ByteArray (convert)
-import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Foldable
 import Data.IORef
 import Data.List ((\\))
+import qualified Data.Map.Strict as M
 import Data.Traversable
 import System.Directory
-import System.IO
+import System.FilePath ((</>))
 
 import Database.Kioku.Internal.BufferMap
 import Database.Kioku.Internal.KiokuDB
@@ -51,16 +47,34 @@ openKiokuDB path = do
   bufs <- newBufferMap
 
   let
-    db = KiokuDB {rootDir = path, bufferMap = bufs}
+    db = KiokuDB {storage = FileStorage path, bufferMap = bufs}
 
   traverse_
-    (createDirectoryIfMissing True)
-    [ dataDir db
-    , tmpDir db
-    , objDir db
+    (createDirectoryIfMissing True . (path </>))
+    [ dataPath
+    , tmpPath
+    , objPath
     ]
 
   pure db
+
+{- | Creates a database that lives entirely in memory and never touches the
+filesystem. It holds the same content-addressed representation as an
+on-disk database and supports the same operations.
+
+Note that this backend is more permissive about result lifetimes than a
+file-backed database. Its buffers are ordinary heap 'BS.ByteString's that stay
+valid indefinitely, whereas a file-backed database serves results from mmapped
+regions that 'closeKiokuDB' (and therefore 'gcKiokuDB') unmaps. Code that must
+also work against a file-backed database still has to force or copy query
+results before the database is closed; an in-memory database will not catch a
+failure to do so.
+-}
+newInMemoryKiokuDB :: IO KiokuDB
+newInMemoryKiokuDB = do
+  bufs <- newBufferMap
+  contents <- newIORef M.empty
+  pure KiokuDB {storage = MemoryStorage contents, bufferMap = bufs}
 
 closeKiokuDB :: KiokuDB -> IO ()
 closeKiokuDB = closeBuffers . bufferMap
@@ -69,17 +83,17 @@ gcKiokuDB :: KiokuDB -> IO ()
 gcKiokuDB db = do
   closeKiokuDB db
   hashRefs <- readHashRefs
-  dataFiles <- listDirectoryContents $ dataDir db
+  dataFiles <- storageList db dataPath
 
   let
     hashes = BS.pack <$> dataFiles
     unreferenced = hashes \\ hashRefs
-    unusedFiles = dataFilePath db <$> unreferenced
+    unusedFiles = dataFilePath <$> unreferenced
 
-  traverse_ removeFile unusedFiles
+  traverse_ (storageRemove db) unusedFiles
  where
   readHashRefs = do
-    namespaces <- listDirectoryContents $ objDir db
+    namespaces <- storageList db objPath
     hashRefs <- mapM readHashRefsFor $ fmap KiokuNamespace namespaces
     pure $ concat hashRefs
 
@@ -90,7 +104,7 @@ gcKiokuDB db = do
     pure (dataSets ++ concat indexes ++ concat schemaRefs)
 
   readDataSetsFor namespace = do
-    paths <- listDirectoryContents $ dataSetObjDir db namespace
+    paths <- storageList db (dataSetObjPath namespace)
 
     for paths $ \name -> do
       dataSetFile <- readDataSetFile namespace name db
@@ -99,30 +113,31 @@ gcKiokuDB db = do
   indexRefs index = [indexHash index, dataHash index]
 
   readIndexesFor namespace = do
-    paths <- listDirectoryContents $ indexObjDir db namespace
+    paths <- storageList db (indexObjPath namespace)
 
     for paths $ \name -> do
       indexFile <- throwErrors $ readIndexFile namespace name db
       pure $ indexRefs indexFile
 
   readSchemasFor namespace = do
-    paths <- listDirectoryContents $ schemaObjDir db namespace
+    paths <- storageList db (schemaObjPath namespace)
 
     for paths $ \name -> do
       schema <- throwErrors $ readSchemaFile namespace name db
       pure $ concatMap (indexRefs . indexContent) $ schemaIndexes schema
-
-listDirectoryContents :: FilePath -> IO [FilePath]
-listDirectoryContents dir =
-  filter (not . (`elem` [".", ".."])) <$> getDirectoryContents dir
 
 withKiokuDB :: FilePath -> (KiokuDB -> IO a) -> IO a
 withKiokuDB path action = do
   db <- openKiokuDB path
   action db `finally` closeKiokuDB db
 
-hashFile :: FilePath -> IO BS.ByteString
-hashFile = fmap (Base16.encode . convert . hashlazy @SHA256) . LBS.readFile
+{- | Runs an action against a database that lives entirely in memory. See
+'newInMemoryKiokuDB' for how this backend differs from a file-backed one.
+-}
+withInMemoryKiokuDB :: (KiokuDB -> IO a) -> IO a
+withInMemoryKiokuDB action = do
+  db <- newInMemoryKiokuDB
+  action db `finally` closeKiokuDB db
 
 createSchema :: KiokuNamespace -> SchemaName -> [IndexName] -> KiokuDB -> IO ()
 createSchema namespace name indexNames db = do
@@ -133,17 +148,12 @@ createSchema namespace name indexNames db = do
 
 createDataSet :: Memorizable a => KiokuNamespace -> DataSetName -> [a] -> KiokuDB -> IO Int
 createDataSet namespace name as db = do
-  (tmpFile, h) <- openTempFile (tmpDir db) name
-  count <- hWriteRows as h
-  hClose h
-
-  sha <- hashFile tmpFile
-  renameFile tmpFile (dataFilePath db sha)
+  (sha, count) <- createBlob db name (\sink -> writeRows sink as)
   writeDataSetFile namespace name (DataSetFile {dataSetHash = sha}) db
   pure count
 
-hWriteRows :: Memorizable a => [a] -> Handle -> IO Int
-hWriteRows as h = do
+writeRows :: Memorizable a => (BS.ByteString -> IO ()) -> [a] -> IO Int
+writeRows sink as = do
   count <- newIORef (0 :: Int)
 
   for_ as $ \a -> do
@@ -152,14 +162,14 @@ hWriteRows as h = do
       len = BS.length bytes
       header = memorize len
 
-    BS.hPutStr h header
-    BS.hPutStr h bytes
+    sink header
+    sink bytes
 
-    modifyIORef count (+ 1)
+    modifyIORef' count (+ 1)
 
   c <- readIORef count
 
-  BS.hPutStr h (memorize c)
+  sink (memorize c)
 
   pure c
 
@@ -174,14 +184,11 @@ createIndex ::
 createIndex namespace dataSetName idxName keyFunc db = do
   dataSetFile <- readDataSetFile namespace dataSetName db
   dataBuf <- openDataBuffer (dataSetHash dataSetFile) db
-  tmpFile <- writeIndex keyFunc dataBuf $ \flushIndex -> do
-    (tmpFile, h) <- openTempFile (tmpDir db) idxName
-    flushIndex h
-    hClose h
-    pure tmpFile
 
-  sha <- hashFile tmpFile
-  renameFile tmpFile (dataFilePath db sha)
+  (sha, ()) <-
+    createBlob db idxName $ \sink ->
+      writeIndex keyFunc dataBuf $ \flushIndex ->
+        flushIndex sink
 
   let
     indexFile =
