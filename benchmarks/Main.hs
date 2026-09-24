@@ -174,7 +174,7 @@ formatExponential precision d =
   sig10 = sigRadix * (10 ** exp10Frac)
 
 newtype TestData = TestData BS.ByteString
-  deriving (Eq, Ord, Show, NFData)
+  deriving (Eq, NFData, Ord, Show)
 
 instance Memorizable TestData where
   memorize (TestData bytes) = bytes

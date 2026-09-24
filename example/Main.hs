@@ -5,9 +5,10 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as CBS
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Foldable
-import Database.Kioku
 import System.Environment
 import System.Exit
+
+import Database.Kioku
 
 main :: IO ()
 main = do

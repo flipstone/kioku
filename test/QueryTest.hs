@@ -17,7 +17,7 @@ import Test.Tasty.Hedgehog (testProperty)
 import Database.Kioku
 
 newtype TestData = TestData BS.ByteString
-  deriving (Eq, Ord, Show, NFData)
+  deriving (Eq, NFData, Ord, Show)
 
 instance Memorizable TestData where
   memorize (TestData bytes) = bytes
